@@ -77,6 +77,7 @@
               (stream-route res route)
               (next)))))
   (.use app (.static express (if dev? "target" "dist")))
+  (.use app (.static express "public"))
   (let [port (if (some? js/process.env.PORT)
                (js/parseInt js/process.env.PORT)
                3000)]
