@@ -1,7 +1,6 @@
 (ns card
   (:require [allpa.core
-             :refer [deftagged defprotomethod]])
-  )
+             :refer [deftagged defprotomethod]]))
 
 (deftagged Suited [suit n])
 (deftagged Joker [color])
@@ -45,7 +44,8 @@
     :else 10))
 
 (defn from-int [n]
-  (if (not= n (int n))
+  (if (or (not= n (int n))
+          (< n 0))
     (->NoCard)
     (let [mod54 (mod n 54)]
       (case mod54
@@ -57,3 +57,4 @@
                     2 :spades
                     3 :clubs)
                   (mod mod54 13))))))
+

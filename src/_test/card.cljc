@@ -20,6 +20,8 @@
     (is (= (c/no-card? (c/->Joker :red))
            false)))
   (testing "from-int"
+    (is (= (c/from-int -1)
+           (c/->NoCard)))
     (is (= (c/from-int nil)
            (c/->NoCard)))
     (is (= (c/from-int 0)
