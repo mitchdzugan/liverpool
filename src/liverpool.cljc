@@ -506,6 +506,10 @@
 (deftagged GameState [state])
 (deftagged Error [error])
 
+(defprotomethod error? [this]
+  Error true
+  GameState false)
+
 (defn filter-game-state [state name]
   (-> state
       (dissoc :deck)

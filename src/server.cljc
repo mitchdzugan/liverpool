@@ -49,6 +49,12 @@
       <meta charset=\"utf-8\">
       <meta content=\"width=device-width, initial-scale=1\" name=\"viewport\">
       <link href=\"/" css-name "\" rel=\"stylesheet\" type=\"text/css\">
+      <script
+          defer
+          src=\"https://use.fontawesome.com/releases/v5.3.1/js/all.js\"
+      >
+      </script>
+
       <title>liverpool</title>
    </head>
    <body>
@@ -67,7 +73,12 @@
   (.write res page-pre)
   (let [{:keys [signal off]}
         (s/build (s/from route e/never))
-        markup-channel (dom/render-to-string {::r/s-route signal} ui.entry/root)]
+        markup-channel (dom/render-to-string {:get-href (fn [] "")
+                                              :get-hash (fn [] "")
+                                              :set-hash (fn [])
+                                              :e-server e/never
+                                              :emit (fn [])
+                                              ::r/s-route signal} ui.entry/root)]
     (go-loop []
       (let [markup (<! markup-channel)]
         (if (nil? markup)
@@ -78,7 +89,7 @@
 
 (def app (express))
 
-(def rooms (atom {}))
+(defonce rooms (atom {}))
 
 (defn make-room-id []
   (let [chars "abcdefghijklmnopqrstuvwxyz0123456789"]
@@ -154,7 +165,14 @@
                                                     (get socket-by-player name)))
                                 (assoc-in [room-id :player-by-socket socket]
                                           name))))
-                   (handle-game-action state action socket name)))))
+                   (do (swap! rooms
+                              (fn [rooms-data]
+                                (-> rooms-data
+                                    (assoc-in [room-id :socket-by-player name]
+                                              socket)
+                                    (assoc-in [room-id :player-by-socket socket]
+                                              name))))
+                       (handle-game-action state action socket name))))))
 
   !l/Ping
   (let [{:keys [room-id]} action]
