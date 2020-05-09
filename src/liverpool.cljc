@@ -3,7 +3,7 @@
             [allpa.core :as a
              :refer [deftagged defprotomethod]]
             [wayra.core :as w
-             :refer [mdo defm defnm fnm pure]]))
+             :refer [mdo defm defnm fnm pure <#>]]))
 
 (comment :state
          {:discard []
@@ -111,13 +111,14 @@
                    (w/fail "Run play did not contain ordered ranks")))
     (w/fail "Invalid play type")))
 
-(defm get-hand-over?
+(defm get-hand-winner
   {:keys [hands]} <- w/get
   [(->> hands
-        vals
-        (map :held)
-        (some empty?)
-        boolean)])
+        keys
+        (filter #(-> hands (get-in [% :held]) empty?))
+        first)])
+
+(def get-hand-over? (<#> get-hand-winner boolean))
 
 (defnm add-to-pid [pid n]
   {:keys [id-by-name]} <- w/get
@@ -521,4 +522,5 @@
                            hand
                            (-> hand
                                (dissoc :held)
-                               (assoc :held-count (count (:held hand))))))))))
+                               (assoc :held-count (count (:held hand))))))))
+      (assoc :name name)))

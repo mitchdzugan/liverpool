@@ -155,16 +155,21 @@
               room-id
               #(let [{:keys [state socket-by-player]} %1]
                  (if (contains? socket-by-player name)
-                   (swap! rooms
-                          (fn [rooms-data]
-                            (-> rooms-data
-                                (assoc-in [room-id :socket-by-player name]
-                                          socket)
-                                (update-in [room-id :player-by-socket]
-                                           (a/curry dissoc
-                                                    (get socket-by-player name)))
-                                (assoc-in [room-id :player-by-socket socket]
-                                          name))))
+                   (do (swap! rooms
+                              (fn [rooms-data]
+                                (-> rooms-data
+                                    (assoc-in [room-id :socket-by-player name]
+                                              socket)
+                                    (update-in [room-id :player-by-socket]
+                                               (a/curry dissoc
+                                                        (get socket-by-player
+                                                             name)))
+                                    (assoc-in [room-id :player-by-socket socket]
+                                              name))))
+                       (.emit socket "liverpool"
+                              (t/write writer (-> state
+                                                  (l/filter-game-state name)
+                                                  l/->GameState))))
                    (do (swap! rooms
                               (fn [rooms-data]
                                 (-> rooms-data

@@ -60,7 +60,8 @@
    :discard-requests {}})
 
 (def after-start-filtered-for-b
-  {:first-turn? true
+  {:name "B"
+   :first-turn? true
    :config {:num-decks 2}
    :drawn? false
    :started? true
@@ -116,17 +117,17 @@
 (defn run-action-error [action state overrides]
   (run-monad-error (l/handle-game-action action) state overrides))
 
-(deftest get-hand-over?
+(deftest get-hand-winner
   (testing "hand is over"
-    (let [expected true
-          actual (run-monad-result l/get-hand-over?
+    (let [expected "A"
+          actual (run-monad-result l/get-hand-winner
                                    (assoc-in after-start [:hands "A" :held] [])
                                    {:cards-per-deck 20
                                     :shuffle reverse})]
       (is (= actual expected))))
   (testing "hand is not over"
-    (let [expected false
-          actual (run-monad-result l/get-hand-over?
+    (let [expected nil
+          actual (run-monad-result l/get-hand-winner
                                    after-start
                                    {:cards-per-deck 20
                                     :shuffle reverse})]
