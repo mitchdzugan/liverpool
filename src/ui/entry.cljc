@@ -870,7 +870,7 @@
                                                       (.-y rect)
                                                       (* -1
                                                          client-y))]
-                                        {:card (-> (.. %1 -dataset -cardVal)
+                                        {:card (-> (.. ^js %1 -dataset -cardVal)
                                                    (js/parseInt 10))
                                          :orientation (if (> dist-x 0)
                                                         :left

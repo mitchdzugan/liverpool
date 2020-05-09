@@ -129,7 +129,7 @@
                                  (l/filter-game-state name)
                                  l/->GameState))))))
 
-(defn use-room [socket room-id f]
+(defn use-room [^js socket room-id f]
   (let [room (get @rooms room-id)]
     (if room
       (f room)
@@ -137,7 +137,7 @@
              (t/write writer (l/->Error (str "Room " room-id
                                              " does not exist")))))))
 
-(defn handle-game-action [state action socket name]
+(defn handle-game-action [state action ^js socket name]
   (let [{:keys [room-id]} action
         result (exec {:reader {:shuffle shuffle
                                :cards-per-deck 54
@@ -151,7 +151,7 @@
       (do (swap! rooms #(assoc-in %1 [room-id :state] state))
           (broadcast-game-state room-id)))))
 
-(defprotomethod handle-action [action socket]
+(defprotomethod handle-action [action ^js socket]
   !l/CreateRoom
   (let [{:keys [name]} action
         room-id (next-room-id)]
@@ -242,7 +242,7 @@
     (.on io "connection"
          (fn [socket]
            (println "New Connection")
-           (.on socket "liverpool"
+           (.on ^js socket "liverpool"
                 #(let [action (t/read reader %1)]
                    (handle-action action socket)))))
     (.listen server port #(println (str "App listening on port " port)))))
