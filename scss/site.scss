@@ -1,6 +1,8 @@
-@import "../node_modules/bulma/bulma";
-
 $grey-dark: hsl(0, 0%, 49%);
+
+@import "../node_modules/bulma/bulma";
+@import './carbontype.scss';
+@import './loversquarrel.scss';
 
 #app {
 		.container.content {
@@ -70,6 +72,24 @@ th {
 		}
 		100% {
 				background-color: rgba(255, 255, 255, 0.15);
+		}
+}
+
+@keyframes shuffle {
+		0% {
+				transform: translateX(0) rotate(0deg);
+		}
+		45% {
+				transform: translateX(0) rotate(0deg);
+		}
+		50% {
+				transform: translateX(10px) rotate(5deg);
+		}
+		95% {
+				transform: translateX(10px) rotate(5deg);
+		}
+		100% {
+				transform: translateX(0) rotate(0deg);
 		}
 }
 
@@ -186,21 +206,15 @@ th {
 				border-top-right-radius: 40px;
 				border-top-left-radius: 40px;
 				background: #435e44;
-				position: absolute;
-				left: 0;
-				top: 0;
 				width: 100%;
-				transition: transform 0.5s ease-in-out;
-				transform: translateY(-100%);
-				z-index: 2;
-				padding: 10px 0;
+				padding: 10px 0 0 0;
 		}
 
 		.play-board-body {
 				position: relative;
 				z-index: 3;
 				background: #435e44;
-				padding-bottom: 10px
+				padding: 10px 0;
 		}
 
 		.play-board-footer {
@@ -331,7 +345,7 @@ th {
 		flex-direction: column;
 		.main-controls {
 				position: sticky;
-				z-index: 1;
+				z-index: 3;
 				top: 0;
 				background: #435e44;
 				border-bottom-right-radius: 40px;
@@ -368,8 +382,11 @@ th {
 				}
 		}
 }
+
 .my-hand {
 		width: 100%;
+		max-width: 100%;
+		margin: auto;
     background: #435e44;
     padding: 20px 10px 10px 10px;
     border-top-right-radius: 40px;
@@ -391,6 +408,24 @@ th {
 				}
 		}
 
+}
+
+@media screen and (min-width: 1024px) {
+		.my-hand {
+				max-width: 960px;
+		}
+}
+
+@media screen and (min-width: 1216px) {
+		.my-hand {
+				max-width: 1152px;
+		}
+}
+
+@media screen and (min-width: 1408px) {
+		.my-hand {
+				max-width: 1344px;
+		}
 }
 
 .invalid {
@@ -493,11 +528,16 @@ body {
 				top: 40%;
 				left: calc(50% - 140px);
 				transform: rotate(-40deg);
+
 				.card-loop {
 						position: absolute;
 						top: 0;
 						left: 0;
 						transform: translateX(10px) rotate(5deg);
+						animation-name: shuffle;
+						animation-duration: 8s;
+						animation-iteration-count: infinite;
+						animation-timing-function: ease-in-out;
 				}
 		}
 
@@ -642,4 +682,23 @@ body {
 
 .button[disabled] {
 		pointer-events: none;
+}
+
+.request-state {
+		transition: opacity 0.5s ease-in-out, text-shadow 0.5s ease-in-out;
+		&.rs-pass {
+				opacity: 0.5;
+		}
+		&.rs-request {
+				text-shadow:
+						$white 0px 0px 6px,
+						$white 0px 0px 6px;
+				&.rs-may-i {
+						text-shadow:
+								$red 0px 0px 6px,
+								$red 0px 0px 6px,
+								$red 0px 0px 6px,
+								$red 0px 0px 6px;
+				}
+		}
 }

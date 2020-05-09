@@ -5,7 +5,7 @@
             [mayu.frp.event :as e]
             [mayu.frp.signal :as s]
             [mayu.dom :as dom]
-            [wayra.core :refer [exec]]
+            [wayra.core :refer [exec <#>]]
             [router :as r]
             [liverpool :as l]
             [card :as c]))
@@ -28,6 +28,14 @@
     (:started? state) :play
     :else :config))
 
+(defui card-loop [i]
+  <[if (= 0 i)
+    <[then <[div {:style {:visibility "hidden"}} "END"]]
+    <[else
+      <[div {:class "card-loop"} $=
+        <[img {:src "/cards/15.0.png"}]
+        <[card-loop (dec i)]]]])
+
 (defui home-screen []
   state <- (dom/envs :state)
   get-hash <- (dom/envs :get-hash)
@@ -45,7 +53,7 @@
           <[div {:class "quarantine"} "QUARANTINE"]
           <[div {:class "liverpool"} "Liverpool"]]
         <[div {:class "card-loop-top"} $=
-          <[div "card loop"]]
+          <[card-loop 16]]
         <[div {:class "actions"} $=
           <[div {:class "field has-addons"} $=
             <[p {:class "control"} $=
@@ -92,7 +100,8 @@
                    #(a/map-values (fn [{:keys [held-count] :as hand}]
                                     (if-not (nil? held-count)
                                       (assoc hand :held (range held-count))
-                                      hand)))))]
+                                      hand))
+                                  %1)))]
   [(->> m
         (exec {:init-state adjusted-state
                :reader {:cards-per-deck 54}})
@@ -115,14 +124,29 @@
         :error
         nil?)])
 
+(defn passes?-m-f [state m]
+  (let [adjusted-state
+        (-> state
+            (update :hands
+                    #(a/map-values (fn [{:keys [held-count] :as hand}]
+                                     (if-not (nil? held-count)
+                                       (assoc hand :held (range held-count))
+                                       hand))
+                                   %1)))]
+    (->> m
+         (exec {:init-state adjusted-state
+                :reader {:name (:name state)
+                         :cards-per-deck 54}})
+         :error
+         nil?)))
+
 (defui turn-reset [k init]
-  state <- (dom/envs :state)
-  let [{:keys [turn hand]} state]
+  let [to-details #(-> [(:turn %1) (:hand %1)])]
   <[dom/memo true $=
-    s-game-state <- (dom/envs :s-game-state)
-    (->> (s/changed s-game-state)
-         (e/map #(-> [(:turn %1) (:hand %1)]))
-         (e/filter #(not= % [turn hand]))
+    s-game-states <- (dom/envs :s-game-states)
+    (->> (s/changed s-game-states)
+         (e/filter #(not= (-> %1 :prev to-details)
+                          (-> %2 :curr to-details)))
          (e/map #(-> init))
          (dom/emit k))])
 
@@ -165,6 +189,7 @@
 (defui unknown-cards [num-cards & args]
   let [opts (nth args 0 {})
        max-cards (get opts :max 11)
+       min-cards (get opts :min 0)
        last (:last opts)
        delayed? (:delayed? opts)
        removed? (:removed? opts)
@@ -191,15 +216,30 @@
                     :class "pcard deck-loop"} $=
                <[img {:src "/cards/15.0.png"}]
                <[deck-loop (inc i)]]]
-           <[last
+           <[(and last (= i (inc num-cards)))
              <[div {:style {:transition "opacity 0.5s ease-in-out 5s"
                             :transform "translate(0, 0)"
                             :opacity "1"
                             :delayed {:opacity "0"}}
                     :class "pcard deck-loop"} $=
-               <[img {:src (-> last c/from-int c/to-src)}]]]
-           <[:else []]])]
-  [(println [:last last])]
+               <[img {:src (-> last c/from-int c/to-src)}]
+               <[deck-loop (inc i)]]]
+           <[(<= i min-cards)
+             <[div {:style {:transition (str "opacity 0.5s ease-in-out, "
+                                             "transform 0.5s ease-in-out")
+                            :transform (if delayed?
+                                         (downed-y x?)
+                                         (steady-y x?))
+                            :delayed (if delayed?
+                                       {:transform (steady-y x?)}
+                                       {})
+                            :remove (if removed?
+                                      {:transform (downed-y x?)}
+                                      {})}
+                    :class "pcard deck-loop"} $=
+               <[img {:src (-> nil c/from-int c/to-src)}]
+               <[deck-loop (inc i)]]]
+           <[:else <[div {:style {:visibility "hidden"}} i]]])]
   <[div {:style {:width (str width "px")} :class "deck-top"} $=
     <[deck-loop 1]
     ] d-stack >
@@ -248,6 +288,8 @@
        turn-name (get name-by-id turn)
        dealer-name (get name-by-id dealer)
        turn? (= name turn-name)
+       dealer? (= name dealer-name)
+       my-turn? turn?
        id (get name-by-id name)
        hand (get hands name)
        {:keys [may-is held down]} hand
@@ -256,6 +298,9 @@
                        (> may-is 0))
        passing? (= false (get discard-requests name))
        may-ing? (= true (get discard-requests name))
+       request-states-by-name (->> request-states
+                                   (a/index-by :name)
+                                   (a/map-values :request-state))
        may-ier (->> request-states
                     (drop 1)
                     (filter #(= :request (:request-state %)))
@@ -263,8 +308,10 @@
                     first)
        picking? (and (not hand-winner) turn? (not drawn?))
        intends? (= false (get discard-requests turn-name))
-       down? (not (empty? down))]
-  [(println {:taker taker})]
+       down? (not (empty? down))
+       awaiting-you? (and (not (and (= :pass (get request-states-by-name name))
+                                    (not= false (get discard-requests name))))
+                          intends?)]
   <[play-state $[held plays picked-tab selected-card view-table?]=
     let [!rec leafs (fn [thing]
                       (cond
@@ -272,7 +319,7 @@
                                           (a/map-values leafs)
                                           vals
                                           flatten)
-                        (coll? thing) (mapcat leafs thing)
+                        (coll? thing) (flatten (map leafs thing))
                         :else thing))
          in-play (->> plays
                       leafs
@@ -353,7 +400,15 @@
                                  [l/->Cancel]
                                  [l/->PassDiscard])))
                    emit-game-action)]
-            <[div {:style {:flex "1"}}]
+            <[div {:class "grant"} $=
+              <[if (and may-ier turn?)
+                <[then
+                  <[button {:class "button is-info is-small"} "Grant May I"
+                    ] d-grant >
+                  (->> (dom/on-click d-grant)
+                       (e/map #(-> [l/->PassDiscard]))
+                       emit-game-action)]
+                <[else <[div]]]]
             <[div {:style {:position "relative"}
                    :class "pcard discarded" :data-card-val discard} $=
               <[img {:src (-> nil c/from-int c/to-src)}]
@@ -379,10 +434,170 @@
                  (e/map #(-> [l/->RequestDiscard]))
                  emit-game-action)
             (->> (dom/on-click d-deck)
-                 (e/map #(-> [l/->PassDiscard]))
+                 (e/map #(if passing? [l/->Cancel] [l/->PassDiscard]))
                  emit-game-action)]]]
+      <[when (= tab :scores)
+        <[div {:class "score-container"} $=
+          <[table {:class "table"} $=
+            <[thead $=
+              <[tr $=
+                <[th "Hand"]
+                <[for players $[name]=
+                  <[keyed name
+                    <[th $=
+                      <[dom/text name]]]]]]
+            <[tbody $=
+              <[for (range 7) $[hand]=
+                <[keyed hand
+                  <[tr $=
+                    <[th (inc hand)]
+                    <[for players $[name]=
+                      <[keyed name
+                        <[td (get-in scores [name hand])]]]]]]
+              <[tr $=
+                <[th "Total"]
+                <[for players $[name]=
+                  <[keyed name
+                    <[td (reduce + 0 (get scores name))]]]]]
+            <[tfoot $=
+              <[tr $=
+                <[th "Cash"]
+                <[for players $[name]=
+                  let [cash (get money name)
+                       p (cond
+                           (= 0 cash) ""
+                           (> cash 0) "+"
+                           :else "-")
+                       i (js/Math.floor (/ (js/Math.abs cash) 100))
+                       d- (mod (js/Math.abs cash) 100)
+                       d (str (if (< d- 10) "0" "") d-)]
+                  <[keyed name
+                    <[td (str "$" p i "." d)]]]]]]]]
       <[when (= tab :table)
         <[div {:class "players"} $=
+          <[when (or hand-winner awaiting-you?)
+            <[div {:style {:position "fixed"
+                           :top "0"
+                           :left "0"
+                           :display "flex"
+                           :justify-content "center"
+                           :height "100vh"
+                           :width "100vw"
+                           :background "rgba(0, 0, 0, 0.5)"
+                           :flex-direction "column"
+                           :align-items "stretch"
+                           :z-index "2"
+                           :transition "opacity 0.5s ease-in-out"
+                           :opacity "0"
+                           :delayed {:opacity "1"}
+                           :remove {:opacity "0"}}} $=
+              <[div {:style {:text-align "center"
+                             :padding "10px 0"
+                             :background "black"}} $=
+                <[when hand-winner
+                  <[p {:class "is-size-5"
+                       :style {:color "white"}} $=
+                    <[dom/text "Hand won by "]
+                    <[span {:class "has-text-weight-bold"} hand-winner]
+                    <[dom/text "!"]]
+                  <[when dealer?
+                    <[button {:class "button is-danger"} "Deal Next Hand"
+                      ] d-deal >
+                    (->> (dom/on-click d-deal)
+                         (e/map #(-> [l/->Deal]))
+                         emit-game-action)]]
+                <[when awaiting-you?
+                  <[if turn?
+                    <[then
+                      <[div (str "You have indicated you would like to"
+                                 " draw from the deck...")]
+                      <[button {:style {:margin "10px 0"}
+                                :class "button is-small is-danger"} "Cancel"
+                        ] d-cancel >
+                      (->> (dom/on-click d-cancel)
+                           (e/map #(-> [l/->Cancel]))
+                           emit-game-action)]
+                    <[else
+                      <[div $=
+                        <[span {:class "has-text-weight-bold"} turn-name]
+                        <[dom/text (str " has indicated they would like to"
+                                        " draw from the deck. What would"
+                                        " you like to do?")]]
+                      <[div {:style {:margin "10px 0 5px 0"}
+                             :class "field has-addons"} $=
+                        <[p {:class "control" :style {:flex "1"}} $=
+                          <[button {:class "button is-static"
+                                    :style {:visibility "hidden"}}]]
+                        <[p {:class "control"} $=
+                          <[button {:class {:button true
+                                            :is-warning (not passing?)
+                                            :is-info passing?
+                                            :is-small true}}
+                            (if passing? "Cancel" "Pass")
+                            ] d-pass >
+                          (->> (dom/on-click d-pass)
+                               (e/map #(if passing?
+                                         [l/->Cancel]
+                                         [l/->PassDiscard]))
+                               emit-game-action)]
+                        <[p {:class "control" :style {:flex "0.5"}} $=
+                          <[button {:class "button is-static"
+                                    :style {:visibility "hidden"}}]]
+                        <[p {:class "control"
+                             :style {:min-width "40px" :max-width "40px"}} $=
+                          <[button {:class "button is-static"
+                                    :style {:visibility "hidden"}}]]
+                        <[p {:class "control" :style {:flex "0.5"}} $=
+                          <[button {:class "button is-static"
+                                    :style {:visibility "hidden"}}]]
+                        <[p {:class "control"} $=
+                          <[button {:class {:button true
+                                            :is-danger (not may-ing?)
+                                            :is-info may-ing?
+                                            :is-small true}}
+                            (if may-ing? "Cancel" "May I")
+                            ] d-may-i >
+                          (->> (dom/on-click d-may-i)
+                               (e/map #(if may-ing?
+                                         [l/->Cancel]
+                                         [l/->RequestDiscard]))
+                               emit-game-action)]
+                        <[p {:class "control" :style {:flex "1"}} $=
+                          <[button {:class "button is-static"
+                                    :style {:visibility "hidden"}}]]]]]
+                  let [awaiting
+                       (->> request-states
+                            (drop 1)
+                            (remove #(let [{:keys [name request-state]} %]
+                                       (and (= :pass request-state)
+                                            (not= false (get discard-requests
+                                                             name))))))]
+                  <[div {:style {:display "flex"
+                                 :flex-direction "column"
+                                 :align-items "stretch"}} $=
+                    <[div $=
+                      <[span {:class "has-text-weight-bold"} "Waiting On "]
+                      <[span {:class "is-size-7"} $=
+                        <[span "( "]
+                        <[span {:class "request-state"} "Waiting"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-pass"}
+                          "Passed"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-request"}
+                          "May I'd"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-request rs-may-i"}
+                          "Top May I"]
+                        <[span " )"]]
+                      ]
+                    <[for awaiting $[{:keys [name request-state]}]=
+                      <[keyed name
+                        <[div {:class {:request-state true
+                                       :rs-pass (= request-state :pass)
+                                       :rs-may-i (= name may-ier)
+                                       :rs-request (= request-state :request)}}
+                          name]]]]]]]]
           <[for players $[name]=
             let [hand (get hands name)
                  {:keys [held may-is down]} hand
@@ -407,88 +622,234 @@
                 <[div {:class "player-contents"} $=
                   <[div {:class "board-hand"} $=
                     <[unknown-cards held-count {:max held-count
+                                                :min 1
                                                 :last (and (= name taker) taken)
                                                 :delayed? true}]
                     <[div {:class "may-i-chips"} $=
                       <[chip 1]
                       <[chip 2]
-                      <[chip 3]]]]]]]]
-        <[div {:class "reserved-space"}]]
+                      <[chip 3]]]]
+                <[for (keys down) $[type]=
+                  let [req (type goals)
+                       piles (get-in plays [:table name type] {})]
+                  <[for (map vector (range) (type down)) $[[id pile]]=
+                    let [[pre post] (get piles id)
+                         guid (hash [type id])
+                         all (vec (concat pre pile post))
+                         all-count (count all)]
+                    <[keyed guid
+                      let [spread-width (+ 35 (* 15 all-count))]
+                      <[div {:id guid
+                             :class "extra-cards"
+                             :style {:width (str spread-width "px")}} $=
+                        <[for (map vector (range) all) $[[i card]]=
+                          let [transform #(str "translate("
+                                               (* i 15)
+                                               "px, " %
+                                               ")")]
+                          <[keyed card
+                            <[div {:class "pcard"
+                                   :style {:transition
+                                           "transform 0.5s ease-in-out"
+                                           :transform
+                                           (transform "200%")
+                                           :delayed
+                                           {:transform (transform "0")}}} $=
+                              <[img {:class {:selected (get in-play card)}
+                                     :src (-> card c/from-int c/to-src)}]]]]
+                        ] d-pile >
+                      (->> (dom/on-click d-pile)
+                           (e/filter #(and selected-card my-turn? drawn?))
+                           (e/map #(let [client-x (.-clientX %)
+                                         el (js/document.getElementById guid)
+                                         rect (.getBoundingClientRect el)
+                                         x (.-x rect)
+                                         width (.-width rect)
+                                         orientation (if (> (* 2
+                                                               (- client-x
+                                                                  x))
+                                                            width)
+                                                       :right
+                                                       :left)
+                                         left? (= orientation :left)
+                                         [new-pre new-post]
+                                         [(if left?
+                                            (vec (concat [selected-card] pre))
+                                            pre)
+                                          (if left?
+                                            post
+                                            (conj post selected-card))]]
+                                     {:pre new-pre :post new-post :pile pile}))
+                           (e/filter (fn [{:keys [pre pile post]}]
+                                       (->> (concat pre pile post)
+                                            vec
+                                            (l/validate-play type)
+                                            (passes?-m-f state))))
+                           (e/map #(-> [(:pre %1) (:post %1)]))
+                           (e/map #(->> %
+                                        (assoc piles id)
+                                        (assoc-in plays [:table name type])))
+                           (dom/emit ::plays))]]]]]]
+          <[div {:class "reserved-space"}]]]
       ] d-in-game >
     (->> (dom/on-click d-in-game)
          (e/map #(-> nil))
          (dom/emit ::selected))
     let [!ui render-goal
          (fn [type id]
-           let [label (type {:set "Set" :run "Run"})]
+           let [req (type {:set 3 :run 4})
+                curr-type (get-in plays [:down type]
+                                  (->> (range (type goals))
+                                       (map #(->> (range req)
+                                                  (map (fn [] nil))
+                                                  vec))
+                                       vec))
+                curr (nth curr-type id)
+                spread (drop (dec req) curr)
+                spread-width (+ 15 (* 15 (count spread)))
+                label (type {:set "Set" :run "Run"})]
            <[div {:class "target"} $=
-             <[div {:class "target-plays"}]
-             <[span {:class {:invalid false}} label]])]
+             <[div {:class "target-plays"} $=
+               <[for (range req) $[n]=
+                 <[keyed n
+                   let [last? (= n (dec req))
+                        full? (every? (comp not nil?) curr)
+                        [pre post] (if (and last? full?)
+                                     [curr []]
+                                     (split-at n curr))
+                        back? (every? (comp not nil?) post)
+                        [non-nil nil-then] (split-with (comp not nil?)
+                                                       (if back? pre post))
+                        dropped (concat non-nil (drop 1 nil-then))
+                        [pre post] (if back? [dropped post] [pre dropped])]
+                   <[if last?
+                     <[then
+                       <[div {:style {:width (str spread-width "px")
+                                      :position "relative"
+                                      :display "inline-block"
+                                      :margin "0 5px"
+                                      :height "45px"}} $=
+                         <[for (map vector (range) spread) $[[i card]]=
+                           <[div {:class "pcard"
+                                  :style {:position "absolute"
+                                          :margin "0"
+                                          :top "0"
+                                          :left "0"
+                                          :transform (str "translateX("
+                                                          (* i 15)
+                                                          "px)")}} $=
+                             <[img {:src (-> card c/from-int c/to-src)}]]]]]
+                     <[else
+                       <[div {:class "pcard"} $=
+                         <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
+                         ]]] d-target >
+                   (->> (dom/on-click d-target)
+                        (e/map #(let [added (if back?
+                                              (concat pre post [selected-card])
+                                              (concat pre [selected-card] post))
+                                      [reqd extra] (split-at req added)
+                                      extra-used (->> extra
+                                                      reverse
+                                                      (remove nil?)
+                                                      reverse)
+                                      updated (vec (concat reqd extra-used))]
+                                  (->> updated
+                                       (assoc curr-type id)
+                                       (assoc-in plays [:down type]))))
+                        (dom/emit ::plays))]]]
+             let [any? (->> curr (remove nil?) empty? not)]
+             invalid? <- <[when any?
+                           (<#> (passes?-m (l/validate-play type curr))
+                                not)]
+             <[span {:class {:invalid invalid?}} label]
+             <[when any?
+               <[span {:class "cancel"} "✗"] d-cancel >
+               (->> (dom/on-click d-cancel)
+                    (e/map #(-> plays
+                                (assoc-in [:down type id]
+                                          (->> (range req)
+                                               (map (fn [] nil))
+                                               vec))))
+                    (dom/emit ::plays))]])]
     let [play-board-open? (or (and (not drawn?) first-turn?)
-                              (and drawn? turn?))]
+                              (and drawn? turn?))
+         !ui render-top
+         (fn []
+           <[div {:class "play-board-top"} $=
+             <[when (not drawn?)
+               <[div {:class "round-header"} round-title]]
+             <[div {:class {:play-controls true :hidden (not drawn?)}} $=
+               <[button {:disabled (empty? in-play)
+                         :class "button is-danger is-small"}
+                 "Cancel"] d-cancel >
+               (->> (dom/on-click d-cancel)
+                    (e/map #(-> {}))
+                    (dom/emit ::plays))
+               <[div {:class "discard-space"} $=
+                 <[div {:class "pcard"} $=
+                   <[img {:src (-> plays :discard c/from-int c/to-src)}]
+                   ] d-discard >
+                 (->> (dom/on-click d-discard)
+                      (e/map #(merge plays {:discard selected-card}))
+                      (dom/emit ::plays))
+                 <[span "Discard"]]
+               <[button {:disabled (not passes?)
+                         :class "button is-danger is-small"}
+                 "End Turn"] d-end-turn >
+               (->> (dom/on-click d-end-turn)
+                    (e/map #(-> [l/->Play plays]))
+                    emit-game-action)]
+             <[when (not down?)
+               <[div {:class "play-closer is-size-7"} $=
+                 <[div]
+                 <[div (str "View " (if view-table? "Plays" "Table"))
+                   ] d-change-view >
+                 (->> (dom/on-click d-change-view)
+                      (e/map #(not view-table?))
+                      (dom/emit ::view-table?))
+                 <[div]]]])]
     <[when (= tab :table)
-      <[div {:style (if play-board-open?
-                      {:transform "translateY(0)"}
-                      {})
-             :class "play-board"} $=
-        <[div {:style {:transition "transform 0.5s ease-in-out"
-                       :transform (if view-table?
-                                    "translateY(100%)"
-                                    "translateY(0)")}} $=
-          <[when play-board-open?
-            <[keyed "play-board-top"
-              <[div {:style {:transform "translateY(0)"
-                             :delayed {:transform "translateY(-100%)"}
-                             :remove {:transform "translateY(0)"}}
-                     :class "play-board-top"} $=
-                <[when (not drawn?)
-                  <[div {:class "round-header"} round-title]]
-                <[div {:class {:play-controls true :hidden (not drawn?)}} $=
-                  <[button {:disabled (empty? in-play)
-                            :class "button is-danger is-small"}
-                    "Cancel"] d-cancel >
-                  (->> (dom/on-click d-cancel)
-                       (e/map #(-> {}))
-                       (dom/emit ::plays))
-                  <[div {:class "discard-space"} $=
-                    <[div {:class "pcard"} $=
-                      <[img {:src (-> plays :discard c/from-int c/to-src)}]
-                      ] d-discard >
-                    (->> (dom/on-click d-discard)
-                         (e/map #(merge {:discard selected-card}))
-                         (dom/emit ::plays))
-                    <[span "Discard"]]
-                  <[button {:disabled (not passes?)
-                            :class "button is-danger is-small"}
-                    "End Turn"] d-end-turn >
-                  (->> (dom/on-click d-end-turn)
-                       (e/map #(-> [l/->Play plays]))
-                       emit-game-action)]
+      <[when play-board-open?
+        <[keyed [tab "play-board"]
+          <[div {:style {:transform "translateY(100%)"
+                         :delayed {:transform "translateY(0)"}
+                         :remove {:transform "translateY(100%)"}}
+                 :class "play-board"} $=
+            <[div {:style {:visibility "hidden"}} $=
+              <[render-top]]
+            <[div {:style {:transition "transform 0.5s ease-in-out"
+                           :transform (if view-table?
+                                        "translateY(100%)"
+                                        "translateY(0)")}} $=
+              <[div {:style {:position "absolute"
+                             :left "0"
+                             :top "0"
+                             :z-index "2"
+                             :width "100%"
+                             :transform "translateY(-100%)"}} $=
+                <[render-top]]
+              <[div {:class "play-board-body"} $=
                 <[when (not down?)
-                  <[div {:class "play-closer is-size-7"} $=
-                    <[div]
-                    <[div (str "View " (if view-table? "Plays" "Table"))
-                      ] d-change-view >
-                    (->> (dom/on-click d-change-view)
-                         (e/map #(not view-table?))
-                         (dom/emit ::view-table?))
-                    <[div]]]]]]
-          <[div {:class "play-board-body"} $=
-            <[when (not down?)
-              <[for (range (:set goals)) $[id]=
-                <[keyed [:set id]
-                  <[render-goal :set id]]]
-              <[for (range (:run goals)) $[id]=
-                <[keyed [:run id]
-                  <[render-goal :run id]]]]]]
-        <[div {:class "play-board-footer"} $=
-          <[render-hand "hidden-parent"]]]]
+                  <[for (range (:set goals)) $[id]=
+                    <[keyed [:set id]
+                      <[render-goal :set id]]]
+                  <[for (range (:run goals)) $[id]=
+                    <[keyed [:run id]
+                      <[render-goal :run id]]]]]
+              <[div {:class "play-board-footer"} $=
+                <[render-hand "hidden-parent"]]]]]]]
     <[when (= tab :table)
       <[div_ {:style {:position "fixed"
                       :width "100%"
                       :z-index "4"
                       :left "0"
-                      :bottom "0"}} $=
+                      :bottom "0"
+                      :transition "transform 0.5s ease-in-out"
+                      :transform "translateY(100%)"
+                      :delayed {:transform (str "translateY("
+                                                (if view-table? "100%" "0")
+                                                ")")}
+                      :remove {:transform "translateY(100%)"}}} $=
         <[render-hand "card-parent"]] d-my-hand >
       let [e-nearest
            (->> (dom/on-click d-my-hand)
@@ -614,14 +975,14 @@
                              e-game-state)
   s-game-state <- (s/map :curr s-game-states)
   <[dom/assoc-env :s-game-state s-game-state $=
-    <[dom/bind s-game-states $[{:keys [curr prev]}]=
-      [(js/console.log curr)]
-      <[dom/assoc-env :prev prev $=
-        <[dom/assoc-env :state curr $=
-          <[when (:room-id curr)
-            [(set-hash (:room-id curr))]]
-          <[div {:class "container content"} $=
-            <[case (get-screen curr)
-              <[:home <[home-screen]]
-              <[:play <[play-screen]]
-              <[:config <[config-screen]]]]]]]])
+    <[dom/assoc-env :s-game-states s-game-states $=
+      <[dom/bind s-game-states $[{:keys [curr prev]}]=
+        <[dom/assoc-env :prev prev $=
+          <[dom/assoc-env :state curr $=
+            <[when (:room-id curr)
+              [(set-hash (:room-id curr))]]
+            <[div {:class "container content"} $=
+              <[case (get-screen curr)
+                <[:home <[home-screen]]
+                <[:play <[play-screen]]
+                <[:config <[config-screen]]]]]]]]])

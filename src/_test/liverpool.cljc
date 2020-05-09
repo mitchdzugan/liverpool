@@ -201,6 +201,20 @@
                                    {:cards-per-deck 20
                                     :shuffle reverse})]
       (is (= actual expected))))
+  (testing "undeclared when down as pass unless current turn"
+    (let [expected
+          [{:name "B" :request-state :na}
+           {:name "A" :request-state :pass}
+           {:name "C" :request-state :pass}]
+          actual (run-monad-result l/get-request-states
+                                   (-> after-start
+                                       (assoc :first-turn? false)
+                                       (assoc :discard-requests {"A" false
+                                                                 "C" false})
+                                       (assoc-in [:hands "B" :down :run 0] [0 1 2 3]))
+                                   {:cards-per-deck 20
+                                    :shuffle reverse})]
+      (is (= actual expected))))
   (testing "explicit when down overrides pass"
     (let [expected
           [{:name "B" :request-state :pass}

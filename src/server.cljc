@@ -54,7 +54,24 @@
           src=\"https://use.fontawesome.com/releases/v5.3.1/js/all.js\"
       >
       </script>
-
+      <link
+          href=\"https://kit-free.fontawesome.com/releases/latest/css/free-v4-shims.min.css\"
+          media=\"all\"
+          rel=\"stylesheet\"
+      >
+      </link>
+      <link
+          href=\"https://kit-free.fontawesome.com/releases/latest/css/free-v4-font-face.min.css\"
+          media=\"all\"
+          rel=\"stylesheet\"
+      >
+      </link>
+      <link
+          href=\"https://kit-free.fontawesome.com/releases/latest/css/free.min.css\"
+          media=\"all\"
+          rel=\"stylesheet\"
+      >
+      </link>
       <title>liverpool</title>
    </head>
    <body>

@@ -112,7 +112,7 @@
     (w/fail "Invalid play type")))
 
 (defm get-hand-winner
-  {:keys [hands]} <- w/get
+  {:keys [hands] :as state} <- w/get
   [(->> hands
         keys
         (filter #(-> hands (get-in [% :held]) empty?))
@@ -155,6 +155,7 @@
                  :request-state
                  (cond
                    (and turn? requesting?) :request
+                   (and turn? (nil? requesting?)) :na
                    (= (:may-is hand) 0) :pass
                    (= requesting? true) :request
                    (= requesting? false) :pass

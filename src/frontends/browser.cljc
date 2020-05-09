@@ -32,6 +32,7 @@
 
 (defn main! []
   (println "Client init")
+  (aset js/window "FontAwesomeConfig" #js{:autoReplaceSvg false})
   (let [e-server (e/on! (e/Event))
         socket (socket-io "")
         e-route (e/on! (e/Event))
