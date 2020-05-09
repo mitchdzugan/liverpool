@@ -15,14 +15,16 @@
                     :target :browser
                     :module-hash-names 8
                     :modules {:client {:init-fn frontends.browser/main!}}
-                    :compiler-options {:warnings {:redef false}}
+                    :compiler-options {:warnings {:redef false}
+                                       :infer-externs :auto}
                     :devtools {:after-load frontends.browser/reload!}
                     :release {:output-dir "dist/"}
                     :build-options {:manifest-name "assets.edn"}}
           :server {:target :node-script
                    :output-to "target/server.js"
                    :main server/main!
-                   :compiler-options {:warnings {:redef false}}
+                   :compiler-options {:warnings {:redef false}
+                                      :infer-externs :auto}
                    :devtools {:after-load server/reload!}
                    :release {:output-to "target/server.js"}}}}}
 
