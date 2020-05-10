@@ -199,10 +199,19 @@
                        (handle-game-action state action socket name))))))
 
   !l/Ping
-  (let [{:keys [room-id]} action]
+  (let [{:keys [room-id name]} action]
     (use-room socket room-id
               #(let [{:keys [player-by-socket state]} %1
-                     name (get player-by-socket socket)]
+                     name (if (nil? name)
+                            (get player-by-socket socket)
+                            name)]
+                 (swap! rooms
+                        (fn [rooms-data]
+                          (-> rooms-data
+                              (assoc-in [room-id socket-by-player name]
+                                        socket)
+                              (assoc-in [room-id player-by-socket socket]
+                                        name))))
                  (.emit socket "liverpool"
                         (t/write writer (-> state
                                             (l/filter-game-state name)

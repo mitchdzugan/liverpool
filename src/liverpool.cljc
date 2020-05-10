@@ -47,7 +47,7 @@
 (deftagged Cancel [room-id])
 (deftagged Play [room-id plays])
 (deftagged Deal [room-id])
-(deftagged Ping [room-id])
+(deftagged Ping [room-id name])
 
 (defn valid-run-order? [cards]
   (->> cards

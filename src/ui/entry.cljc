@@ -984,8 +984,10 @@
                     (e/filter l/error?)
                     (e/map :error))]
   s-error <- (s/from nil e-error)
-  s-game-states <- (s/reduce (fn [{:keys [curr]} next]
-                               {:curr next :prev curr})
+  s-game-states <- (s/reduce (fn [{:keys [curr prev]} next]
+                               (if (= next curr)
+                                 {:curr curr :prev prev}
+                                 {:curr next :prev curr}))
                              {}
                              e-game-state)
   s-game-state <- (s/map :curr s-game-states)
@@ -995,7 +997,11 @@
         <[dom/assoc-env :prev prev $=
           <[dom/assoc-env :state curr $=
             <[when (:room-id curr)
-              [(set-hash (:room-id curr))]]
+              [(set-hash (:room-id curr))]
+              <[dom/memo [(:name curr) (:room-id curr)] $=
+                (->> (e/timer 2000)
+                     (e/map #(-> [l/->Ping (:name curr)]))
+                     emit-game-action)]]
             <[div {:class "container content"} $=
               <[case (get-screen curr)
                 <[:home <[home-screen]]
