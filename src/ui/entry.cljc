@@ -36,20 +36,6 @@
         <[img {:src "/cards/15.0.png"}]
         <[card-loop (dec i)]]]])
 
-(defn on-input [el]
-  (->> [dom/on-blur
-        dom/on-change
-        dom/on-click
-        dom/on-focus
-        dom/on-input
-        dom/on-key-down
-        dom/on-key-up]
-       (map #(% el))
-       (apply e/join)
-       (e/map #(.. % -target -value))
-       (e/remove nil?)
-       e/dedup))
-
 (defui home-screen []
   state <- (dom/envs :state)
   get-hash <- (dom/envs :get-hash)
@@ -76,7 +62,8 @@
                        :value name
                        :placeholder "Your Name"}
                 ] d-name >
-              (->> (on-input d-name)
+              (->> (dom/on-input d-name)
+                   (e/map #(.. % -target -value))
                    (e/map #(-> [:name %]))
                    (dom/emit ::home-state))]
             <[p {:class "control"} $=
@@ -93,7 +80,8 @@
                        :value room-id
                        :placeholder "Room ID"}
                 ] d-room-id >
-              (->> (on-input d-room-id)
+              (->> (dom/on-input d-room-id)
+                   (e/map #(.. % -target -value))
                    (e/map #(-> [:room-id %]))
                    (dom/emit ::home-state))]
             <[p {:class "control"} $=
@@ -104,39 +92,7 @@
                    (e/map #(l/->JoinRoom room-id name))
                    emit-action)]]]]]])
 
-(defui run-m [m]
-  state <- (dom/envs :state)
-  let [adjusted-state
-       (-> state
-           (update :hands
-                   #(a/map-values (fn [{:keys [held-count] :as hand}]
-                                    (if-not (nil? held-count)
-                                      (assoc hand :held (range held-count))
-                                      hand))
-                                  %1)))]
-  [(->> m
-        (exec {:init-state adjusted-state
-               :reader {:cards-per-deck 54}})
-        :result)])
-
-(defui passes?-m [m]
-  state <- (dom/envs :state)
-  let [adjusted-state
-       (-> state
-           (update :hands
-                   #(a/map-values (fn [{:keys [held-count] :as hand}]
-                                    (if-not (nil? held-count)
-                                      (assoc hand :held (range held-count))
-                                      hand))
-                                  %1)))]
-  [(->> m
-        (exec {:init-state adjusted-state
-               :reader {:name (:name state)
-                        :cards-per-deck 54}})
-        :error
-        nil?)])
-
-(defn passes?-m-f [state m]
+(defn exec-m-f [state m]
   (let [adjusted-state
         (-> state
             (update :hands
@@ -148,9 +104,18 @@
     (->> m
          (exec {:init-state adjusted-state
                 :reader {:name (:name state)
-                         :cards-per-deck 54}})
-         :error
-         nil?)))
+                         :cards-per-deck 54}}))))
+
+(defn passes?-m-f [state m]
+  (->> (exec-m-f state m) :error nil?))
+
+(defn run-m [m]
+  (<#> (dom/envs :state)
+       #(->> (exec-m-f % m) :result)))
+
+(defn passes?-m [m]
+  (<#> (dom/envs :state)
+       #(passes?-m-f % m)))
 
 (defui turn-reset [k init]
   let [to-details #(-> [(:turn %1) (:hand %1)])]
@@ -780,10 +745,13 @@
                <[span {:class "cancel"} "✗"] d-cancel >
                (->> (dom/on-click d-cancel)
                     (e/map #(-> plays
-                                (assoc-in [:down type id]
-                                          (->> (range req)
-                                               (map (fn [] nil))
-                                               vec))))
+                                (assoc-in [:down type id] (->> (range req)
+                                                               (map (fn [] nil))
+                                                               vec))
+                                (update :down (fn [downs]
+                                                (if (every? nil? (leafs downs))
+                                                  nil
+                                                  downs)))))
                     (dom/emit ::plays))]])]
     let [play-board-open? (or (and (not drawn?) first-turn?)
                               (and drawn? turn?))
