@@ -215,53 +215,40 @@
        removed? (:removed? opts)
        spread-count (js/Math.min num-cards max-cards)
        width (+ (* 2 spread-count) 25)
-       downed-y #(str "translate(" (if % "2px" "0") ", 200%)")
-       steady-y #(str "translate(" (if % "2px" "0") ", 0)")
-       !ui !rec deck-loop
-       (fn [i]
-         let [x? (> i (- num-cards spread-count))]
-         <[cond
-           <[(<= i num-cards)
-             <[div {:style {:transition (str "opacity 0.5s ease-in-out, "
-                                             "transform 0.5s ease-in-out")
-                            :transform (if delayed?
-                                         (downed-y x?)
-                                         (steady-y x?))
-                            :delayed (if delayed?
-                                       {:transform (steady-y x?)}
-                                       {})
-                            :remove (if removed?
-                                      {:transform (downed-y x?)}
-                                      {})}
-                    :class "pcard deck-loop"} $=
-               <[img {:src "/cards/15.0.png"}]
-               <[deck-loop (inc i)]]]
-           <[(and last (= i (inc num-cards)))
-             <[div {:style {:transition "opacity 0.5s ease-in-out 5s"
-                            :transform "translate(0, 0)"
-                            :opacity "1"
-                            :delayed {:opacity "0"}}
-                    :class "pcard deck-loop"} $=
-               <[img {:src (-> last c/from-int c/to-src)}]
-               <[deck-loop (inc i)]]]
-           <[(<= i min-cards)
-             <[div {:style {:transition (str "opacity 0.5s ease-in-out, "
-                                             "transform 0.5s ease-in-out")
-                            :transform (if delayed?
-                                         (downed-y x?)
-                                         (steady-y x?))
-                            :delayed (if delayed?
-                                       {:transform (steady-y x?)}
-                                       {})
-                            :remove (if removed?
-                                      {:transform (downed-y x?)}
-                                      {})}
-                    :class "pcard deck-loop"} $=
-               <[img {:src (-> nil c/from-int c/to-src)}]
-               <[deck-loop (inc i)]]]
-           <[:else <[div {:style {:visibility "hidden"}} i]]])]
+       downed-y #(str "translate(" (* %1 2) "px, " (+ %1 200)"%)")
+       steady-y #(str "translate(" (* % 2) "px, 0)")]
   <[div {:style {:width (str width "px")} :class "deck-top"} $=
-    <[deck-loop 1]
+    <[for (range (inc (max min-cards num-cards))) $[i]=
+      <[keyed i
+        let [x (max 0 (- i (- num-cards spread-count)))
+             get-styles
+             #(merge {:transition (str "opacity 0.5s ease-in-out 5s, "
+                                       "transform 0.5s ease-in-out")
+                      :transform (if delayed?
+                                   (downed-y %1)
+                                   (steady-y %1))}
+                     (if delayed?
+                       {:delayed {:transform (steady-y %1)}}
+                       {})
+                     (if removed?
+                       {:remove {:transform (downed-y %1)}}
+                       {}))]
+        <[cond
+          <[(< i num-cards)
+            <[div {:style (get-styles x)
+                   :class "pcard deck-loop"} $=
+              <[img {:src "/cards/15.0.png"}]]]
+          <[(and last (= i num-cards))
+            <[div {:style (-> (get-styles (dec x))
+                              (assoc :opacity "1")
+                              (assoc-in [:delayed :opacity] "0"))
+                   :class "pcard deck-loop"} $=
+              <[img {:src (-> last c/from-int c/to-src)}]]]
+          <[(< i min-cards)
+            <[div {:style (get-styles 0)
+                   :class "pcard deck-loop"} $=
+              <[img {:src (-> nil c/from-int c/to-src)}]]]
+          <[:else []]]]]
     ] d-stack >
   <[div {:class "full-count"} num-cards]
   [d-stack])
