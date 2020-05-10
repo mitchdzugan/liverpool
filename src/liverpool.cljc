@@ -405,7 +405,9 @@
             (w/fail "Must play discard or go out but not both"))
    (w/modify #(dissoc % :played))
    next-turn <- (inc-pid turn)
-   let [new-hand (-> hand
+   {:keys [hands]} <- w/get
+   let [hand (get hands name)
+        new-hand (-> hand
                      (update :down #(if down? down %))
                      (update :held #(->> %1
                                          (remove (partial contains? played-set))

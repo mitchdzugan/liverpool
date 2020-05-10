@@ -810,6 +810,28 @@
                                    {:name "B"
                                     :shuffle reverse})]
       (is (= actual expected))))
+  (testing "succesful play on self with no down"
+    (let [init-state (-> after-draw
+                         (assoc :turn 2)
+                         (assoc-in [:hands "A" :down]
+                                   {:set [[2 15 28]
+                                          [3 16 29]]})
+                         (assoc-in [:hands "A" :held] [41 53 9 10]))
+          expected (-> init-state
+                       (assoc :drawn? false)
+                       (assoc :first-turn? false)
+                       (assoc :turn 0)
+                       (assoc :discard [9 6])
+                       (assoc-in [:hands "A" :held] [10])
+                       (assoc-in [:hands "A" :down :set 0]
+                                 [53 2 15 28 41]))
+          actual (run-action-state (l/->Play 0 {:discard 9
+                                                :table {"A" {:set {0 [[53]
+                                                                      [41]]}}}})
+                                   init-state
+                                   {:name "A"
+                                    :shuffle reverse})]
+      (is (= actual expected))))
   (testing "round win"
     (let [init-state (-> after-draw
                          (assoc-in [:scores "A"] [10])

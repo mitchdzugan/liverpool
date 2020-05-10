@@ -36,6 +36,20 @@
         <[img {:src "/cards/15.0.png"}]
         <[card-loop (dec i)]]]])
 
+(defn on-input [el]
+  (->> [dom/on-blur
+        dom/on-change
+        dom/on-click
+        dom/on-focus
+        dom/on-input
+        dom/on-key-down
+        dom/on-key-up]
+       (map #(% el))
+       (apply e/join)
+       (e/map #(.. % -target -value))
+       (e/remove nil?)
+       e/dedup))
+
 (defui home-screen []
   state <- (dom/envs :state)
   get-hash <- (dom/envs :get-hash)
@@ -62,8 +76,7 @@
                        :value name
                        :placeholder "Your Name"}
                 ] d-name >
-              (->> (dom/on-input d-name)
-                   (e/map #(.. % -target -value))
+              (->> (on-input d-name)
                    (e/map #(-> [:name %]))
                    (dom/emit ::home-state))]
             <[p {:class "control"} $=
@@ -80,8 +93,7 @@
                        :value room-id
                        :placeholder "Room ID"}
                 ] d-room-id >
-              (->> (dom/on-input d-room-id)
-                   (e/map #(.. % -target -value))
+              (->> (on-input d-room-id)
                    (e/map #(-> [:room-id %]))
                    (dom/emit ::home-state))]
             <[p {:class "control"} $=
@@ -693,7 +705,7 @@
                                             pre)
                                           (if left?
                                             post
-                                            (conj post selected-card))]]
+                                            (vec (concat post [selected-card])))]]
                                      {:pre new-pre :post new-post :pile pile}))
                            (e/filter (fn [{:keys [pre pile post]}]
                                        (->> (concat pre pile post)
