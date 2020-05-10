@@ -150,25 +150,33 @@
          (e/map #(-> init))
          (dom/emit k))])
 
+(defn ammend-client-held [srvr held]
+  (let [to-m #(->> %
+                   (a/index-by identity)
+                   (a/map-values (fn [] true)))
+        m-held (to-m held)
+        m-srvr (to-m srvr)]
+    (-> (concat (filter #(get m-srvr %) held)
+                (remove #(get m-held %) srvr))
+        vec)))
+
 (defui play-state [inner]
   state <- (dom/envs :state)
+  get-item <- (dom/envs :get-item)
+  set-item <- (dom/envs :set-item)
   let [crab dom/collect-reduce-and-bind
-       {:keys [hands name]} state
-       {:keys [may-is held down]} (get hands name)]
-  <[crab ::held #(-> %2) held $[held]=
+       {:keys [hands name room-id]} state
+       {:keys [may-is held down]} (get hands name)
+       storage-key (str (hash [name room-id]))
+       storage-held (get-item storage-key)
+       init-held (ammend-client-held held storage-held)]
+  <[crab ::held #(-> %2) init-held $[held]=
+    [(set-item storage-key held)]
     <[dom/memo held $=
       s-game-state <- (dom/envs :s-game-state)
       (->> (s/changed s-game-state)
            (e/map #(get-in %1 [:hands (:name %1) :held]))
-           (e/map (fn [srvr]
-                    (let [to-m #(->> %
-                                     (a/index-by identity)
-                                     (a/map-values (fn [] true)))
-                          m-held (to-m held)
-                          m-srvr (to-m srvr)]
-                      (-> (concat (filter #(get m-srvr %) held)
-                                  (remove #(get m-held %) srvr))
-                          vec))))
+           (e/map #(ammend-client-held % held))
            (dom/emit ::held))]
     <[crab ::tab #(-> %2) :table $[picked-tab]=
       <[crab ::view-table? #(-> %2) false $[view-table?]=
@@ -311,7 +319,12 @@
        down? (not (empty? down))
        awaiting-you? (and (not (and (= :pass (get request-states-by-name name))
                                     (not= false (get discard-requests name))))
-                          intends?)]
+                          intends?)
+       leader (->> money
+                   (a/map-values vector)
+                   vals
+                   (apply max-key first)
+                   last)]
   <[play-state $[held plays picked-tab selected-card view-table?]=
     let [!rec leafs (fn [thing]
                       (cond
@@ -445,7 +458,9 @@
                 <[for players $[name]=
                   <[keyed name
                     <[th $=
-                      <[dom/text name]]]]]]
+                      <[dom/text name]
+                      <[when (and (= leader name) game-over?)
+                        <[i {:class "fas fa-crown"}]]]]]]]
             <[tbody $=
               <[for (range 7) $[hand]=
                 <[keyed hand

@@ -22,7 +22,11 @@
 (defn mount-root []
   (let [{:keys [off]}
         (attach/attach (js/document.getElementById "app")
-                       {:get-href #(.. js/window -location -href)
+                       {:get-item #(->> (js/localStorage.getItem %)
+                                        (t/read reader))
+                        :set-item #(->> (t/write writer %2)
+                                        (js/localStorage.setItem %1))
+                        :get-href #(.. js/window -location -href)
                         :get-hash #(.. js/window -location -hash)
                         :set-hash #(set! (.. js/window -location -hash) %)
                         :e-server @a-e-server

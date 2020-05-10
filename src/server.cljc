@@ -90,7 +90,9 @@
   (.write res page-pre)
   (let [{:keys [signal off]}
         (s/build (s/from route e/never))
-        markup-channel (dom/render-to-string {:get-href (fn [] "")
+        markup-channel (dom/render-to-string {:get-item (fn [])
+                                              :set-item (fn [])
+                                              :get-href (fn [] "")
                                               :get-hash (fn [] "")
                                               :set-hash (fn [])
                                               :e-server e/never
