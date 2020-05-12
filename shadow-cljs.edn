@@ -1,5 +1,5 @@
 {:source-paths ["src" "cli"]
- :dependencies [[mayu "0.1.33"]
+ :dependencies [[mayu "0.1.37"]
                 ^:dev [lambdaisland/deep-diff2 "2.0.0-84"]]
  :open-file-command ["subl"
                      ["%s:%s:%s" :file :line :column]]
