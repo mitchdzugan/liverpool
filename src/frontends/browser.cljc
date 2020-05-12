@@ -64,4 +64,5 @@
   (let [room-id (->> (.. js/window -location -hash)
                      (drop 1)
                      (reduce str ""))]
-    (@a-emit (l/->Ping room-id nil))))
+    (when-not (empty? room-id)
+      (@a-emit (l/->Ping room-id nil)))))

@@ -951,6 +951,31 @@
                     (e/filter l/error?)
                     (e/map :error))]
   s-error <- (s/from nil e-error)
+  let [e-error-defer (e/defer e-error 5000)
+       e-auto-dismiss (->> (e/tag-with vector e-error-defer s-error)
+                           (e/filter #(apply = %1))
+                           (e/map #(-> nil)))]
+  <[dom/collect ::error-display $[e-error-display]=
+    (dom/emit ::error-display e-error)
+    (dom/emit ::error-display e-auto-dismiss)
+    s-error-display <- (s/from nil e-error-display)
+    <[dom/bind s-error-display $[error-display]=
+      <[when error-display
+        <[div {:class "notification is-danger"
+               :style {:position "fixed"
+                       :top "1em"
+                       :left "calc(50% - 10em)"
+                       :width "20em"
+                       :z-index "10"
+                       :transition "opacity 0.5s ease-in-out"
+                       :opacity "0"
+                       :delayed {:opacity "1"}
+                       :remove {:opacity "0"}}} $=
+          <[button {:class "delete"} ] d-dismiss >
+          (->> (dom/on-click d-dismiss)
+               (e/map #(-> nil))
+               (dom/emit ::error-display))
+          <[dom/text error-display]]]]]
   s-game-states <- (s/reduce (fn [{:keys [curr prev]} next]
                                (if (= next curr)
                                  {:curr curr :prev prev}
@@ -969,8 +994,9 @@
                 (->> (e/timer 2000)
                      (e/map #(-> [l/->Ping (:name curr)]))
                      emit-game-action)]]
-            <[div {:class "container content"} $=
-              <[case (get-screen curr)
-                <[:home <[home-screen]]
-                <[:play <[play-screen]]
-                <[:config <[config-screen]]]]]]]]])
+            <[keyed "main-content"
+              <[div {:class "container content"} $=
+                <[case (get-screen curr)
+                  <[:home <[home-screen]]
+                  <[:play <[play-screen]]
+                  <[:config <[config-screen]]]]]]]]]])
