@@ -24,7 +24,7 @@
 
 (defn get-screen [state]
   (cond
-    (nil? state) :home
+    (nil? (:room-id state)) :home
     (:started? state) :play
     :else :config))
 
@@ -273,15 +273,17 @@
        request-states-by-name (->> request-states
                                    (a/index-by :name)
                                    (a/map-values :request-state))
-       may-ier (->> request-states
-                    (drop 1)
-                    (filter #(= :request (:request-state %)))
-                    (map :name)
-                    first)
+       may-ier (and (not drawn?)
+                    (->> request-states
+                         (drop 1)
+                         (filter #(= :request (:request-state %)))
+                         (map :name)
+                         first))
        picking? (and (not hand-winner) turn? (not drawn?))
        intends? (= false (get discard-requests turn-name))
        down? (not (empty? down))
-       awaiting-you? (and (not (and (= :pass (get request-states-by-name name))
+       awaiting-you? (and (not drawn?)
+                          (not (and (= :pass (get request-states-by-name name))
                                     (not= false (get discard-requests name))))
                           intends?)
        leader (->> money
@@ -323,7 +325,7 @@
                                     :in-play (get in-play card)}
                             :src (-> card c/from-int c/to-src)}]
                      ] d-hand >
-                   (->> (dom/on-click d-hand)
+                   (->> (dom/on-click {:capture false} d-hand)
                         (e/filter #(nil? selected-card))
                         (e/map #(-> card))
                         (dom/emit ::selected))]]]])]
@@ -340,7 +342,7 @@
                                 :is-small true
                                 :has-text-weight-bold (= tab :table)}}
                 "Table"] d-table >
-              (->> (dom/on-click d-table)
+              (->> (dom/on-click {:capture false} d-table)
                    (e/map #(-> :table))
                    (dom/emit ::tab))]]
           <[p {:class "control"} $=
@@ -348,7 +350,7 @@
                               :is-small true
                               :has-text-weight-bold (= tab :scores)}}
               "Scores"] d-scores >
-            (->> (dom/on-click d-scores)
+            (->> (dom/on-click {:capture false} d-scores)
                  (e/map #(-> :scores))
                  (dom/emit ::tab))]
           <[p {:class "control"} $=
@@ -363,7 +365,7 @@
                   <[then <[dom/text "Cancel"]]
                   <[else <[dom/text "May I"] <[br] <[dom/text may-is]]]
                 ] d-may-i >
-              (->> (dom/on-click d-may-i)
+              (->> (dom/on-click {:capture false} d-may-i)
                    (e/filter #(-> can-may-i?))
                    (e/map #(-> (if may-ing?
                                  [l/->Cancel]
@@ -371,18 +373,18 @@
                    emit-game-action)
               <[button {:class {:pass-button true :cancel passing?}}
                 (if passing? "Cancel" "Pass")] d-pass >
-              (->> (dom/on-click d-pass)
+              (->> (dom/on-click {:capture false} d-pass)
                    (e/filter #(-> can-may-i?))
                    (e/map #(-> (if passing?
                                  [l/->Cancel]
                                  [l/->PassDiscard])))
                    emit-game-action)]
             <[div {:class "grant"} $=
-              <[if (and may-ier turn?)
+              <[if (and may-ier turn? (not drawn?))
                 <[then
                   <[button {:class "button is-info is-small"} "Grant May I"
                     ] d-grant >
-                  (->> (dom/on-click d-grant)
+                  (->> (dom/on-click {:capture false} d-grant)
                        (e/map #(-> [l/->PassDiscard]))
                        emit-game-action)]
                 <[else <[div]]]]
@@ -407,10 +409,10 @@
                     <[img {:src (-> card c/from-int c/to-src)}]]]]
               ] d-discard >
             <[unknown-cards deck-count {:removed? true}] d-deck >
-            (->> (dom/on-click d-discard)
+            (->> (dom/on-click {:capture false} d-discard)
                  (e/map #(-> [l/->RequestDiscard]))
                  emit-game-action)
-            (->> (dom/on-click d-deck)
+            (->> (dom/on-click {:capture false} d-deck)
                  (e/map #(if passing? [l/->Cancel] [l/->PassDiscard]))
                  emit-game-action)]]]
       <[when (= tab :scores)
@@ -482,7 +484,7 @@
                   <[when dealer?
                     <[button {:class "button is-danger"} "Deal Next Hand"
                       ] d-deal >
-                    (->> (dom/on-click d-deal)
+                    (->> (dom/on-click {:capture false} d-deal)
                          (e/map #(-> [l/->Deal]))
                          emit-game-action)]]
                 <[when awaiting-you?
@@ -493,7 +495,7 @@
                       <[button {:style {:margin "10px 0"}
                                 :class "button is-small is-danger"} "Cancel"
                         ] d-cancel >
-                      (->> (dom/on-click d-cancel)
+                      (->> (dom/on-click {:capture false} d-cancel)
                            (e/map #(-> [l/->Cancel]))
                            emit-game-action)]
                     <[else
@@ -514,7 +516,7 @@
                                             :is-small true}}
                             (if passing? "Cancel" "Pass")
                             ] d-pass >
-                          (->> (dom/on-click d-pass)
+                          (->> (dom/on-click {:capture false} d-pass)
                                (e/map #(if passing?
                                          [l/->Cancel]
                                          [l/->PassDiscard]))
@@ -536,7 +538,7 @@
                                             :is-small true}}
                             (if may-ing? "Cancel" "May I")
                             ] d-may-i >
-                          (->> (dom/on-click d-may-i)
+                          (->> (dom/on-click {:capture false} d-may-i)
                                (e/map #(if may-ing?
                                          [l/->Cancel]
                                          [l/->RequestDiscard]))
@@ -555,28 +557,29 @@
                                  :flex-direction "column"
                                  :align-items "stretch"}} $=
                     <[div $=
-                      <[span {:class "has-text-weight-bold"} "Waiting On "]
-                      <[span {:class "is-size-7"} $=
-                        <[span "( "]
-                        <[span {:class "request-state"} "Waiting"]
-                        <[span ", "]
-                        <[span {:class "request-state rs-pass"}
-                          "Passed"]
-                        <[span ", "]
-                        <[span {:class "request-state rs-request"}
-                          "May I'd"]
-                        <[span ", "]
-                        <[span {:class "request-state rs-request rs-may-i"}
-                          "Top May I"]
-                        <[span " )"]]
-                      ]
+                      <[span {:class "has-text-weight-bold"} "Waiting On "]]
                     <[for awaiting $[{:keys [name request-state]}]=
                       <[keyed name
                         <[div {:class {:request-state true
                                        :rs-pass (= request-state :pass)
                                        :rs-may-i (= name may-ier)
                                        :rs-request (= request-state :request)}}
-                          name]]]]]]]]
+                          name]]]
+                    <[div {:style {:align-self "flex-end" :margin "0 2em"}
+                           :class "is-size-7"} $=
+                      <[span "( "]
+                      <[span {:class "request-state"} "Waiting"]
+                      <[span ", "]
+                      <[span {:class "request-state rs-pass"}
+                        "Passed"]
+                      <[span ", "]
+                      <[span {:class "request-state rs-request"}
+                        "Requested May I"]
+                      <[span ", "]
+                      <[span {:class "request-state rs-request rs-may-i"}
+                        "Received May I"]
+                      <[span " )"]]
+                    ]]]]]
           <[for players $[name]=
             let [hand (get hands name)
                  {:keys [held may-is down]} hand
@@ -637,7 +640,7 @@
                               <[img {:class {:selected (get in-play card)}
                                      :src (-> card c/from-int c/to-src)}]]]]
                         ] d-pile >
-                      (->> (dom/on-click d-pile)
+                      (->> (dom/on-click {:capture false} d-pile)
                            (e/filter #(and selected-card my-turn? drawn?))
                            (e/map #(let [client-x (.-clientX %)
                                          el (js/document.getElementById guid)
@@ -671,7 +674,7 @@
                            (dom/emit ::plays))]]]]]]
           <[div {:class "reserved-space"}]]]
       ] d-in-game >
-    (->> (dom/on-click d-in-game)
+    (->> (dom/on-click {:capture false} d-in-game)
          (e/map #(-> nil))
          (dom/emit ::selected))
     let [!ui render-goal
@@ -722,7 +725,7 @@
                        <[div {:class "pcard"} $=
                          <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
                          ]]] d-target >
-                   (->> (dom/on-click d-target)
+                   (->> (dom/on-click {:capture false} d-target)
                         (e/map #(let [added (if back?
                                               (concat pre post [selected-card])
                                               (concat pre [selected-card] post))
@@ -743,7 +746,7 @@
              <[span {:class {:invalid invalid?}} label]
              <[when any?
                <[span {:class "cancel"} "✗"] d-cancel >
-               (->> (dom/on-click d-cancel)
+               (->> (dom/on-click {:capture false} d-cancel)
                     (e/map #(-> plays
                                 (assoc-in [:down type id] (->> (range req)
                                                                (map (fn [] nil))
@@ -764,21 +767,21 @@
                <[button {:disabled (empty? in-play)
                          :class "button is-danger is-small"}
                  "Cancel"] d-cancel >
-               (->> (dom/on-click d-cancel)
+               (->> (dom/on-click {:capture false} d-cancel)
                     (e/map #(-> {}))
                     (dom/emit ::plays))
                <[div {:class "discard-space"} $=
                  <[div {:class "pcard"} $=
                    <[img {:src (-> plays :discard c/from-int c/to-src)}]
                    ] d-discard >
-                 (->> (dom/on-click d-discard)
+                 (->> (dom/on-click {:capture false} d-discard)
                       (e/map #(merge plays {:discard selected-card}))
                       (dom/emit ::plays))
                  <[span "Discard"]]
                <[button {:disabled (not passes?)
                          :class "button is-danger is-small"}
                  "End Turn"] d-end-turn >
-               (->> (dom/on-click d-end-turn)
+               (->> (dom/on-click {:capture false} d-end-turn)
                     (e/map #(-> [l/->Play plays]))
                     emit-game-action)]
              <[when (not down?)
@@ -786,7 +789,7 @@
                  <[div]
                  <[div (str "View " (if view-table? "Plays" "Table"))
                    ] d-change-view >
-                 (->> (dom/on-click d-change-view)
+                 (->> (dom/on-click {:capture false} d-change-view)
                       (e/map #(not view-table?))
                       (dom/emit ::view-table?))
                  <[div]]]])]
@@ -834,7 +837,7 @@
                       :remove {:transform "translateY(100%)"}}} $=
         <[render-hand "card-parent"]] d-my-hand >
       let [e-nearest
-           (->> (dom/on-click d-my-hand)
+           (->> (dom/on-click {:capture false} d-my-hand)
                 (e/remove #(nil? selected-card))
                 (e/map (fn [dom-event]
                          (let [client-x (.-clientX dom-event)
@@ -982,10 +985,33 @@
                                  {:curr next :prev curr}))
                              {}
                              e-game-state)
-  s-game-state <- (s/map :curr s-game-states)
+  s-defered <- (s/defer s-game-states 5000)
+  s-all <- (s/zip-with (fn [fast slow]
+                         (let [{:keys [drawn?
+                                       turn
+                                       name-by-id
+                                       discard-requests]} (:curr fast)
+                               base (if (and drawn?
+                                             (-> discard-requests
+                                                 (get (get name-by-id turn))
+                                                 (= false))
+                                             (not (nil? (:curr slow))))
+                                      (assoc (:curr slow) :paused? true)
+                                      (:curr fast))]
+                           (println [drawn?
+                                     (-> discard-requests
+                                         (get (get name-by-id turn))
+                                         (= false))
+                                     discard-requests])
+                           {:curr (assoc base :discard-requests discard-requests)
+                            :prev (:prev fast)}))
+                       s-game-states
+                       s-defered)
+  s-game-state <- (s/map :curr s-all)
   <[dom/assoc-env :s-game-state s-game-state $=
-    <[dom/assoc-env :s-game-states s-game-states $=
-      <[dom/bind s-game-states $[{:keys [curr prev]}]=
+    <[dom/assoc-env :s-game-states s-all $=
+      <[dom/bind s-all $[{:keys [curr prev]}]=
+        [(js/console.log curr)]
         <[dom/assoc-env :prev prev $=
           <[dom/assoc-env :state curr $=
             <[when (:room-id curr)

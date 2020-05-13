@@ -189,16 +189,14 @@
                                      (a/curry conj top))
                           (assoc :deck (vec new-deck))
                           (assoc :discard (vec new-discard))
-                          (assoc :drawn? true)
-                          (assoc :discard-requests {}))))
+                          (assoc :drawn? true))))
   (w/whenm (and can-request? (= name turn-name))
            let [[top & rest] discard]
            (w/modify #(-> %1
                           (update-in [:hands turn-name :held]
                                      (a/curry conj top))
                           (assoc :discard (vec rest))
-                          (assoc :drawn? true)
-                          (assoc :discard-requests {}))))
+                          (assoc :drawn? true))))
   (w/whenm (and can-request? (not= name turn-name))
            let [needs-reshuffle? (<= (count deck) 3)
                 [top & rest-discard] discard
@@ -216,8 +214,7 @@
                           (assoc :discard (if needs-reshuffle?
                                             []
                                             (vec rest-discard)))
-                          (assoc :drawn? true)
-                          (assoc :discard-requests {})))))
+                          (assoc :drawn? true)))))
 
 (defm progress-when-possible
   request-states <- get-request-states
@@ -414,6 +411,7 @@
                                          vec)))]
    (w/modify #(-> %1
                   (merge {:first-turn? false
+                          :discard-requests {}
                           :drawn? false
                           :discard (vec (concat (if discard? [discard] [])
                                                 discard-pile))
