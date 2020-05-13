@@ -106,6 +106,9 @@
                 :reader {:name (:name state)
                          :cards-per-deck 54}}))))
 
+(defn run-m-f [state m]
+  (->> (->> (exec-m-f state m) :result)))
+
 (defn passes?-m-f [state m]
   (->> (exec-m-f state m) :error nil?))
 
@@ -139,37 +142,60 @@
 
 (defui play-state [inner]
   state <- (dom/envs :state)
-  get-item <- (dom/envs :get-item)
-  set-item <- (dom/envs :set-item)
-  let [crab dom/collect-reduce-and-bind
-       {:keys [hands name room-id]} state
-       {:keys [may-is held down]} (get hands name)
-       storage-key (str (hash [name room-id]))
-       storage-held (get-item storage-key)
-       init-held (ammend-client-held held storage-held)]
-  <[crab ::held #(-> %2) init-held $[held]=
-    [(set-item storage-key held)]
-    <[dom/memo held $=
-      s-game-state <- (dom/envs :s-game-state)
-      (->> (s/changed s-game-state)
-           (e/map #(get-in %1 [:hands (:name %1) :held]))
-           (e/map #(ammend-client-held % held))
-           (dom/emit ::held))]
-    <[crab ::tab #(-> %2) :table $[picked-tab]=
-      <[crab ::view-table? #(-> %2) false $[view-table?]=
-        (turn-reset ::view-table? false)
-        <[crab ::plays #(-> %2) {} $[plays]=
-          (turn-reset ::plays {})
-          <[crab ::selected #(-> %2) nil $[selected-card]=
-            <[dom/memo true $=
+  <[dom/memo (:room-id state) $=
+    get-item <- (dom/envs :get-item)
+    set-item <- (dom/envs :set-item)
+    let [car dom/collect-and-reduce
+         {:keys [hands name room-id]} state
+         {:keys [may-is held down]} (get hands name)
+         storage-key (str (hash [name room-id]))
+         storage-held (get-item storage-key)
+         init-held (ammend-client-held held storage-held)]
+    <[car ::held #(-> %2) init-held $=
+      <[car ::tab #(-> %2) :table $=
+        <[car ::view-table? #(-> %2) false $=
+          (turn-reset ::view-table? false)
+          <[car ::plays #(-> %2) {} $=
+            (turn-reset ::plays {})
+            <[car ::selected #(-> %2) nil $=
+              s-game-states <- (dom/envs :s-game-states)
               s-held <- (dom/envs ::held)
               s-tab <- (dom/envs ::tab)
+              s-view-table <- (dom/envs ::view-table?)
               s-plays <- (dom/envs ::plays)
-              s-deps <- (s/zip-with #(hash [%1 %2 %3]) s-held s-tab s-plays)
-              (->> (s/changed s-deps)
-                   (e/map #(-> nil))
-                   (dom/emit ::selected))]
-            <[inner held plays picked-tab selected-card view-table?]]]]]])
+              s-selected <- (dom/envs ::selected)
+              s-deps <- (s/zip-with #(-> [%1 %2 %3 %4 %5 %6])
+                                    s-held
+                                    s-tab
+                                    s-view-table
+                                    s-plays
+                                    s-selected
+                                    s-game-states)
+              s-selected-deps <- (s/zip-with #(hash [%1 %2 %3])
+                                             s-held
+                                             s-tab
+                                             s-plays)
+              (->> (s/changed s-selected-deps)
+                     (e/map #(-> nil))
+                     (dom/emit ::selected))
+              <[dom/bind s-deps $[[client-held
+                                   picked-tab
+                                   view-table?
+                                   plays
+                                   selected-card
+                                   {:keys [curr prev]}]]=
+                <[dom/assoc-env :prev prev $=
+                  <[dom/assoc-env :state curr $=
+                    let [{:keys [hands name]} curr
+                         {:keys [held]} (get hands name)
+                         now-held (ammend-client-held held client-held)]
+                    [(set-item storage-key now-held)]
+                    <[inner
+                      now-held
+                      plays
+                      picked-tab
+                      selected-card
+                      view-table?]]]]]]]]]])
 
 (defui unknown-cards [num-cards & args]
   let [opts (nth args 0 {})
@@ -219,79 +245,79 @@
   [d-stack])
 
 (defui play-screen []
-  prev <- (dom/envs :prev)
-  state <- (dom/envs :state)
-  hand-winner <- (run-m l/get-hand-winner)
-  request-states <- (run-m l/get-request-states)
-  let [prev-discard (:discard prev)
-       prev-hands (:hands prev)
-       {:keys [discard
-               deck-count
-               first-turn?
-               drawn?
-               id-by-name
-               name-by-id
-               hands
-               money
-               scores
-               hand
-               dealer
-               turn
-               discard-requests
-               name]} state
-       taken? (= (count prev-discard)
-                 (inc (count discard)))
-       held-count (fn [name hands]
-                    (let [{:keys [held held-count]} (get hands name)]
-                      (if (nil? held-count) (count held) held-count)))
-       taken (and taken? (first prev-discard))
-       taker (and taken?
-                  (->> id-by-name
-                       keys
-                       (map #(-> {:name % :diff (- (held-count % hands)
-                                                   (held-count % prev-hands))}))
-                       (apply max-key :diff)
-                       :name))
-       players (keys id-by-name)
-       final? (= 6 hand)
-       round-title (if final? "Final Round" (str "Round " (inc hand)))
-       game-over? (and hand-winner final?)
-       goals (nth l/hand-goals hand)
-       turn-name (get name-by-id turn)
-       dealer-name (get name-by-id dealer)
-       turn? (= name turn-name)
-       dealer? (= name dealer-name)
-       my-turn? turn?
-       id (get name-by-id name)
-       hand (get hands name)
-       {:keys [may-is held down]} hand
-       can-may-i? (and (not drawn?)
-                       (not turn?)
-                       (> may-is 0))
-       passing? (= false (get discard-requests name))
-       may-ing? (= true (get discard-requests name))
-       request-states-by-name (->> request-states
-                                   (a/index-by :name)
-                                   (a/map-values :request-state))
-       may-ier (and (not drawn?)
-                    (->> request-states
-                         (drop 1)
-                         (filter #(= :request (:request-state %)))
-                         (map :name)
-                         first))
-       picking? (and (not hand-winner) turn? (not drawn?))
-       intends? (= false (get discard-requests turn-name))
-       down? (not (empty? down))
-       awaiting-you? (and (not drawn?)
-                          (not (and (= :pass (get request-states-by-name name))
-                                    (not= false (get discard-requests name))))
-                          intends?)
-       leader (->> money
-                   (a/map-values vector)
-                   vals
-                   (apply max-key first)
-                   last)]
   <[play-state $[held plays picked-tab selected-card view-table?]=
+    prev <- (dom/envs :prev)
+    state <- (dom/envs :state)
+    hand-winner <- (run-m l/get-hand-winner)
+    request-states <- (run-m l/get-request-states)
+    let [prev-discard (:discard prev)
+         prev-hands (:hands prev)
+         {:keys [discard
+                 deck-count
+                 first-turn?
+                 drawn?
+                 id-by-name
+                 name-by-id
+                 hands
+                 money
+                 scores
+                 hand
+                 dealer
+                 turn
+                 discard-requests
+                 name]} state
+         taken? (= (count prev-discard)
+                   (inc (count discard)))
+         held-count (fn [name hands]
+                      (let [{:keys [held held-count]} (get hands name)]
+                        (if (nil? held-count) (count held) held-count)))
+         taken (and taken? (first prev-discard))
+         taker (and taken?
+                    (->> id-by-name
+                         keys
+                         (map #(-> {:name % :diff (- (held-count % hands)
+                                                     (held-count % prev-hands))}))
+                         (apply max-key :diff)
+                         :name))
+         players (keys id-by-name)
+         final? (= 6 hand)
+         round-title (if final? "Final Round" (str "Round " (inc hand)))
+         game-over? (and hand-winner final?)
+         goals (nth l/hand-goals hand)
+         turn-name (get name-by-id turn)
+         dealer-name (get name-by-id dealer)
+         turn? (= name turn-name)
+         dealer? (= name dealer-name)
+         my-turn? turn?
+         id (get name-by-id name)
+         hand (get hands name)
+         {:keys [may-is down]} hand
+         can-may-i? (and (not drawn?)
+                         (not turn?)
+                         (> may-is 0))
+         passing? (= false (get discard-requests name))
+         may-ing? (= true (get discard-requests name))
+         request-states-by-name (->> request-states
+                                     (a/index-by :name)
+                                     (a/map-values :request-state))
+         may-ier (and (not drawn?)
+                      (->> request-states
+                           (drop 1)
+                           (filter #(= :request (:request-state %)))
+                           (map :name)
+                           first))
+         picking? (and (not hand-winner) turn? (not drawn?))
+         intends? (= false (get discard-requests turn-name))
+         down? (not (empty? down))
+         awaiting-you? (and (not drawn?)
+                            (not (and (= :pass (get request-states-by-name name))
+                                      (not= false (get discard-requests name))))
+                            intends?)
+         leader (->> money
+                     (a/map-values vector)
+                     vals
+                     (apply max-key first)
+                     last)]
     let [!rec leafs (fn [thing]
                       (cond
                         (map? thing) (->> thing
@@ -325,7 +351,7 @@
                                     :in-play (get in-play card)}
                             :src (-> card c/from-int c/to-src)}]
                      ] d-hand >
-                   (->> (dom/on-click {:capture false} d-hand)
+                   (->> (dom/on-click d-hand)
                         (e/filter #(nil? selected-card))
                         (e/map #(-> card))
                         (dom/emit ::selected))]]]])]
@@ -342,7 +368,7 @@
                                 :is-small true
                                 :has-text-weight-bold (= tab :table)}}
                 "Table"] d-table >
-              (->> (dom/on-click {:capture false} d-table)
+              (->> (dom/on-click d-table)
                    (e/map #(-> :table))
                    (dom/emit ::tab))]]
           <[p {:class "control"} $=
@@ -350,7 +376,7 @@
                               :is-small true
                               :has-text-weight-bold (= tab :scores)}}
               "Scores"] d-scores >
-            (->> (dom/on-click {:capture false} d-scores)
+            (->> (dom/on-click d-scores)
                  (e/map #(-> :scores))
                  (dom/emit ::tab))]
           <[p {:class "control"} $=
@@ -365,7 +391,7 @@
                   <[then <[dom/text "Cancel"]]
                   <[else <[dom/text "May I"] <[br] <[dom/text may-is]]]
                 ] d-may-i >
-              (->> (dom/on-click {:capture false} d-may-i)
+              (->> (dom/on-click d-may-i)
                    (e/filter #(-> can-may-i?))
                    (e/map #(-> (if may-ing?
                                  [l/->Cancel]
@@ -373,7 +399,7 @@
                    emit-game-action)
               <[button {:class {:pass-button true :cancel passing?}}
                 (if passing? "Cancel" "Pass")] d-pass >
-              (->> (dom/on-click {:capture false} d-pass)
+              (->> (dom/on-click d-pass)
                    (e/filter #(-> can-may-i?))
                    (e/map #(-> (if passing?
                                  [l/->Cancel]
@@ -384,7 +410,7 @@
                 <[then
                   <[button {:class "button is-info is-small"} "Grant May I"
                     ] d-grant >
-                  (->> (dom/on-click {:capture false} d-grant)
+                  (->> (dom/on-click d-grant)
                        (e/map #(-> [l/->PassDiscard]))
                        emit-game-action)]
                 <[else <[div]]]]
@@ -409,10 +435,10 @@
                     <[img {:src (-> card c/from-int c/to-src)}]]]]
               ] d-discard >
             <[unknown-cards deck-count {:removed? true}] d-deck >
-            (->> (dom/on-click {:capture false} d-discard)
+            (->> (dom/on-click d-discard)
                  (e/map #(-> [l/->RequestDiscard]))
                  emit-game-action)
-            (->> (dom/on-click {:capture false} d-deck)
+            (->> (dom/on-click d-deck)
                  (e/map #(if passing? [l/->Cancel] [l/->PassDiscard]))
                  emit-game-action)]]]
       <[when (= tab :scores)
@@ -484,7 +510,7 @@
                   <[when dealer?
                     <[button {:class "button is-danger"} "Deal Next Hand"
                       ] d-deal >
-                    (->> (dom/on-click {:capture false} d-deal)
+                    (->> (dom/on-click d-deal)
                          (e/map #(-> [l/->Deal]))
                          emit-game-action)]]
                 <[when awaiting-you?
@@ -495,7 +521,7 @@
                       <[button {:style {:margin "10px 0"}
                                 :class "button is-small is-danger"} "Cancel"
                         ] d-cancel >
-                      (->> (dom/on-click {:capture false} d-cancel)
+                      (->> (dom/on-click d-cancel)
                            (e/map #(-> [l/->Cancel]))
                            emit-game-action)]
                     <[else
@@ -516,7 +542,7 @@
                                             :is-small true}}
                             (if passing? "Cancel" "Pass")
                             ] d-pass >
-                          (->> (dom/on-click {:capture false} d-pass)
+                          (->> (dom/on-click d-pass)
                                (e/map #(if passing?
                                          [l/->Cancel]
                                          [l/->PassDiscard]))
@@ -538,7 +564,7 @@
                                             :is-small true}}
                             (if may-ing? "Cancel" "May I")
                             ] d-may-i >
-                          (->> (dom/on-click {:capture false} d-may-i)
+                          (->> (dom/on-click d-may-i)
                                (e/map #(if may-ing?
                                          [l/->Cancel]
                                          [l/->RequestDiscard]))
@@ -640,7 +666,7 @@
                               <[img {:class {:selected (get in-play card)}
                                      :src (-> card c/from-int c/to-src)}]]]]
                         ] d-pile >
-                      (->> (dom/on-click {:capture false} d-pile)
+                      (->> (dom/on-click {:capture true} d-pile)
                            (e/filter #(and selected-card my-turn? drawn?))
                            (e/map #(let [client-x (.-clientX %)
                                          el (js/document.getElementById guid)
@@ -725,7 +751,7 @@
                        <[div {:class "pcard"} $=
                          <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
                          ]]] d-target >
-                   (->> (dom/on-click {:capture false} d-target)
+                   (->> (dom/on-click d-target)
                         (e/map #(let [added (if back?
                                               (concat pre post [selected-card])
                                               (concat pre [selected-card] post))
@@ -746,7 +772,7 @@
              <[span {:class {:invalid invalid?}} label]
              <[when any?
                <[span {:class "cancel"} "✗"] d-cancel >
-               (->> (dom/on-click {:capture false} d-cancel)
+               (->> (dom/on-click d-cancel)
                     (e/map #(-> plays
                                 (assoc-in [:down type id] (->> (range req)
                                                                (map (fn [] nil))
@@ -767,21 +793,21 @@
                <[button {:disabled (empty? in-play)
                          :class "button is-danger is-small"}
                  "Cancel"] d-cancel >
-               (->> (dom/on-click {:capture false} d-cancel)
+               (->> (dom/on-click d-cancel)
                     (e/map #(-> {}))
                     (dom/emit ::plays))
                <[div {:class "discard-space"} $=
                  <[div {:class "pcard"} $=
                    <[img {:src (-> plays :discard c/from-int c/to-src)}]
                    ] d-discard >
-                 (->> (dom/on-click {:capture false} d-discard)
+                 (->> (dom/on-click d-discard)
                       (e/map #(merge plays {:discard selected-card}))
                       (dom/emit ::plays))
                  <[span "Discard"]]
                <[button {:disabled (not passes?)
                          :class "button is-danger is-small"}
                  "End Turn"] d-end-turn >
-               (->> (dom/on-click {:capture false} d-end-turn)
+               (->> (dom/on-click d-end-turn)
                     (e/map #(-> [l/->Play plays]))
                     emit-game-action)]
              <[when (not down?)
@@ -789,7 +815,7 @@
                  <[div]
                  <[div (str "View " (if view-table? "Plays" "Table"))
                    ] d-change-view >
-                 (->> (dom/on-click {:capture false} d-change-view)
+                 (->> (dom/on-click d-change-view)
                       (e/map #(not view-table?))
                       (dom/emit ::view-table?))
                  <[div]]]])]
@@ -837,7 +863,7 @@
                       :remove {:transform "translateY(100%)"}}} $=
         <[render-hand "card-parent"]] d-my-hand >
       let [e-nearest
-           (->> (dom/on-click {:capture false} d-my-hand)
+           (->> (dom/on-click d-my-hand)
                 (e/remove #(nil? selected-card))
                 (e/map (fn [dom-event]
                          (let [client-x (.-clientX dom-event)
@@ -991,18 +1017,23 @@
                                        turn
                                        name-by-id
                                        discard-requests]} (:curr fast)
+                               request-states (run-m-f (assoc (:prev fast)
+                                                              :discard-requests
+                                                              {})
+                                                       l/get-request-states)
                                base (if (and drawn?
                                              (-> discard-requests
                                                  (get (get name-by-id turn))
                                                  (= false))
-                                             (not (nil? (:curr slow))))
-                                      (assoc (:curr slow) :paused? true)
+                                             (not (nil? (:curr slow)))
+                                             (not= (:curr slow) (:curr fast))
+                                             (->> request-states
+                                                  (drop 1)
+                                                  (map :request-state)
+                                                  (every? #(= :pass %))
+                                                  not))
+                                      (assoc (:prev fast) :paused? true)
                                       (:curr fast))]
-                           (println [drawn?
-                                     (-> discard-requests
-                                         (get (get name-by-id turn))
-                                         (= false))
-                                     discard-requests])
                            {:curr (assoc base :discard-requests discard-requests)
                             :prev (:prev fast)}))
                        s-game-states
