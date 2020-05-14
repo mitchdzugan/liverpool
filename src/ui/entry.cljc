@@ -359,7 +359,7 @@
            :class "in-game"} $=
       <[div {:style {:position "fixed"
                      :z-index "9"}
-             :class "field has-addons"} $=
+             :class "tab-bar field has-addons"} $=
         <[when (not game-over?)
           <[p {:class "control"} $=
             <[button {:style {:color "transparent"}
@@ -453,44 +453,45 @@
                    (e/map #(if passing? [l/->Cancel] [l/->PassDiscard]))
                    emit-game-action)]]]]
       <[when (= tab :scores)
-        <[div {:class "score-container"} $=
-          <[table {:class "table"} $=
-            <[thead $=
-              <[tr $=
-                <[th "Hand"]
-                <[for players $[name]=
-                  <[keyed name
-                    <[th $=
-                      <[dom/text name]
-                      <[when (and (= leader name) game-over?)
-                        <[i {:class "fas fa-crown"}]]]]]]]
-            <[tbody $=
-              <[for (range 7) $[hand]=
-                <[keyed hand
-                  <[tr $=
-                    <[th (inc hand)]
-                    <[for players $[name]=
-                      <[keyed name
-                        <[td (get-in scores [name hand])]]]]]]
-              <[tr $=
-                <[th "Total"]
-                <[for players $[name]=
-                  <[keyed name
-                    <[td (reduce + 0 (get scores name))]]]]]
-            <[tfoot $=
-              <[tr $=
-                <[th "Cash"]
-                <[for players $[name]=
-                  let [cash (get money name)
-                       p (cond
-                           (= 0 cash) ""
-                           (> cash 0) "+"
-                           :else "-")
-                       i (js/Math.floor (/ (js/Math.abs cash) 100))
-                       d- (mod (js/Math.abs cash) 100)
-                       d (str (if (< d- 10) "0" "") d-)]
-                  <[keyed name
-                    <[td (str "$" p i "." d)]]]]]]]]
+        <[keyed "scores"
+          <[div {:class "score-container"} $=
+            <[table {:class "table"} $=
+              <[thead $=
+                <[tr $=
+                  <[th "Hand"]
+                  <[for players $[name]=
+                    <[keyed name
+                      <[th $=
+                        <[dom/text name]
+                        <[when (and (= leader name) game-over?)
+                          <[i {:class "fas fa-crown"}]]]]]]]
+              <[tbody $=
+                <[for (range 7) $[hand]=
+                  <[keyed hand
+                    <[tr $=
+                      <[th (inc hand)]
+                      <[for players $[name]=
+                        <[keyed name
+                          <[td (get-in scores [name hand])]]]]]]
+                <[tr $=
+                  <[th "Total"]
+                  <[for players $[name]=
+                    <[keyed name
+                      <[td (reduce + 0 (get scores name))]]]]]
+              <[tfoot $=
+                <[tr $=
+                  <[th "Cash"]
+                  <[for players $[name]=
+                    let [cash (get money name)
+                         p (cond
+                             (= 0 cash) ""
+                             (> cash 0) "+"
+                             :else "-")
+                         i (js/Math.floor (/ (js/Math.abs cash) 100))
+                         d- (mod (js/Math.abs cash) 100)
+                         d (str (if (< d- 10) "0" "") d-)]
+                    <[keyed name
+                      <[td (str "$" p i "." d)]]]]]]]]]
       <[when (= tab :table)
         <[div {:class "tn players"
                :delayed-class "players"} $=
@@ -620,10 +621,14 @@
                             :else may-ier)]]
                       <[for awaiting $[{:keys [name request-state]}]=
                         <[keyed name
+                          let [didnt? (and paused? (= request-state :na))]
                           <[div {:class {:request-state true
-                                         :rs-pass (= request-state :pass)
-                                         :rs-auto (not= (get discard-requests name)
-                                                        false)
+                                         :rs-pass (or (= request-state :pass)
+                                                      didnt?)
+                                         :rs-auto (or (not= (get discard-requests
+                                                                 name)
+                                                            false)
+                                                      didnt?)
                                          :rs-may-i (and paused? (= name may-ier))
                                          :rs-request (= request-state :request)}}
                             name]]]
@@ -934,13 +939,14 @@
                             dom-event]))))
            close? (fn [[{:keys [dist-x dist-y]}]]
                     (and (< dist-x 46)
-                         (< dist-y 35)))]
+                         (< dist-y 35)))
+           stop-propagation (partial e/map (fn [[nearest dom-event]]
+                                             (.stopPropagation dom-event)
+                                             nearest))]
       (->> e-nearest
            (e/filter close?)
-           (e/map (fn [[nearest dom-event]]
-                    (.stopPropagation dom-event)
-                    nearest))
-           (e/remove #(= selected-card (:card %)))
+           (e/remove #(= selected-card (:card (first %))))
+           stop-propagation
            (e/map #(let [{:keys [card orientation]} %
                          left? (= orientation :left)
                          partitioned (->> held
@@ -958,9 +964,8 @@
                          vec)))
            (dom/emit ::held))
       (->> e-nearest
-           (e/remove close?)
-           (e/map first)
-           (e/remove #(not= selected-card (:card %1)))
+           (e/remove #(and (close? %1) (not= selected-card (:card (first %1)))))
+           stop-propagation
            (e/map #(-> nil))
            (dom/emit ::selected))]])
 

@@ -419,6 +419,10 @@ th {
 				max-width: 960px;
 		}
 
+		#app .tab-bar {
+				max-width: 960px;
+		}
+
 		.play-board {
 				max-width: 960px;
 				left: calc(50% - 480px);
@@ -430,6 +434,10 @@ th {
 				max-width: 1152px;
 		}
 
+		#app .tab-bar {
+				max-width: 1152px;
+		}
+
 		.play-board {
 				max-width: 1152px;
 				left: calc(50% - 576px);
@@ -438,6 +446,10 @@ th {
 
 @media screen and (min-width: 1408px) {
 		.my-hand {
+				max-width: 1344px;
+		}
+
+		#app .tab-bar {
 				max-width: 1344px;
 		}
 

@@ -16,3 +16,10 @@
 # Heroku
 automatically works for heroku app with clojure -> node buildpack
 
+# TODO
+ [ ] speed up w/ memo usage (maybe not worth)
+ [x] auto-pass waitings when paused
+ [x] disambiguate table body and scores body with keys (fixed in mayu)
+ [x] fix click on self when selected
+ [x] fix tab bar at full width
+ [/] changed :delayed-class to delayed {:class ...} in mayu (fixed the bug but still only using :delayed-class)
