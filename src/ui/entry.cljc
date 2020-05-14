@@ -213,9 +213,7 @@
       <[keyed i
         let [x (max 0 (- i (- num-cards spread-count)))
              get-styles
-             #(merge {:transition (str "opacity 0.5s ease-in-out 5s, "
-                                       "transform 0.5s ease-in-out")
-                      :transform (if delayed?
+             #(merge {:transform (if delayed?
                                    (downed-y %1)
                                    (steady-y %1))}
                      (if delayed?
@@ -227,17 +225,17 @@
         <[cond
           <[(< i num-cards)
             <[div {:style (get-styles x)
-                   :class "pcard deck-loop"} $=
+                   :class "t4 pcard deck-loop"} $=
               <[img {:src "/cards/15.0.png"}]]]
           <[(and last (= i num-cards))
             <[div {:style (-> (get-styles (dec x))
                               (assoc :opacity "1")
                               (assoc-in [:delayed :opacity] "0"))
-                   :class "pcard deck-loop"} $=
+                   :class "t4 pcard deck-loop"} $=
               <[img {:src (-> last c/from-int c/to-src)}]]]
           <[(< i min-cards)
             <[div {:style (get-styles 0)
-                   :class "pcard deck-loop"} $=
+                   :class "t4 pcard deck-loop"} $=
               <[img {:src (-> nil c/from-int c/to-src)}]]]
           <[:else []]]]]
     ] d-stack >
@@ -338,17 +336,16 @@
     let [tab (if game-over? :scores picked-tab)
          !ui render-hand
          (fn [parent-id]
-           <[div {:class "my-hand"} $=
+           <[div {:class "tn my-hand"
+                  :delayed-class "my-hand"} $=
              <[div {:id parent-id :class "card-parent"} $=
                <[for held $[card]=
                  <[keyed card
-                   <[div {:style {:transition (str "opacity 0.5s ease-in-out, "
-                                                   "transform 0.5s ease-in-out")
-                                  :opacity "0"
+                   <[div {:style {:opacity "0"
                                   :transform "translateX(200%)"
                                   :delayed {:opacity "1"
                                             :transform "translateX(0)"}}
-                          :class "pcard" :data-card-val card} $=
+                          :class "t1 pcard" :data-card-val card} $=
                      <[img {:class {:clickable (nil? selected-card)
                                     :selected (= card selected-card)
                                     :in-play (get in-play card)}
@@ -391,13 +388,13 @@
       <[when (= tab :table)
         <[keyed "main-controls"
           <[div {:style {:padding-top "2em"
-                         :transition "transform 0.5s ease-in-out"
                          :width "100%"
                          :transform "translateY(-100%)"
                          :delayed {:transform "translateY(0)"}
                          :remove {:position "absolute"
                                   :transform "translateY(-100%)"}}
-                 :class "main-controls"} $=
+                 :class "tn t2 main-controls"
+                 :delayed-class "t2 main-controls"} $=
             <[div {:class {:deck true :picking picking? :intended intends?}} $=
               <[when can-may-i?
                 <[button {:class {:may-i true :cancel may-ing?}} $=
@@ -437,15 +434,13 @@
                                    :left "0"
                                    :top "0"
                                    :margin "0"
-                                   :transition (str "opacity 0.5s ease-in-out, "
-                                                    "transform 0.5s ease-in-out")
                                    :transform "translateY(200%)"
                                    :opacity "0"
                                    :delayed {:transform "translateY(0)"
                                              :opacity "1"}
                                    :remove {:transform "translateY(200%)"
                                             :opacity "0"}}
-                           :class "pcard"} $=
+                           :class "t1 pcard"} $=
                       <[img {:src (-> card c/from-int c/to-src)}]]]]
                 ] d-discard >
               <[unknown-cards deck-count {:removed? true}] d-deck >
@@ -497,9 +492,11 @@
                   <[keyed name
                     <[td (str "$" p i "." d)]]]]]]]]
       <[when (= tab :table)
-        <[div {:class "players"} $=
+        <[div {:class "tn players"
+               :delayed-class "players"} $=
           <[when (or hand-winner (and intends? (not drawn?)))
-            <[div {:style {:position "fixed"
+            <[div {:class "t3"
+                   :style {:position "fixed"
                            :top "0"
                            :left "0"
                            :display "flex"
@@ -510,142 +507,143 @@
                            :flex-direction "column"
                            :align-items "stretch"
                            :z-index "2"
-                           :transition "opacity 0.5s ease-in-out"
                            :opacity "0"
                            :delayed {:opacity "1"}
                            :remove {:opacity "0"}}} $=
               <[div {:style {:text-align "center"
-                             :padding "10px 1.5em"
-                             :background "black"}} $=
-                <[when hand-winner
-                  <[p {:class "is-size-5"
-                       :style {:color "white"}} $=
-                    <[dom/text "Hand won by "]
-                    <[span {:class "has-text-weight-bold"} hand-winner]
-                    <[dom/text "!"]]
-                  <[when dealer?
-                    <[button {:class "button is-danger"} "Deal Next Hand"
-                      ] d-deal >
-                    (->> (dom/on-click d-deal)
-                         (e/map #(-> [l/->Deal]))
-                         emit-game-action)]]
-                <[when intends?
-                  <[div {:style {:opacity (if paused? "0.5" "1")
-                                 :transition "opacity 0.5s ease-in-out"}} $=
-                    <[if turn?
-                      <[then
-                        <[div (str "You have indicated you would like to"
-                                   " draw from the deck...")]
-                        <[button {:disabled (boolean paused?)
-                                  :style {:margin "10px 0"}
-                                  :class "button is-small is-danger"} "Cancel"
-                          ] d-cancel >
-                        (->> (dom/on-click d-cancel)
-                             (e/map #(-> [l/->Cancel]))
-                             emit-game-action)]
-                      <[else
-                        <[div $=
-                          <[span {:class "has-text-weight-bold"} turn-name]
-                          <[dom/text (str " has indicated they would like to"
-                                          " draw from the deck. "
-                                          (cond
-                                            (not can-may-i-pre-pause?) ""
-                                            awaiting-you?
-                                            "What would you like to do?"
-                                            :else
-                                            (str "We assume you are passing so "
-                                                 "you don't need to input "
-                                                 "anything but you can still "
-                                                 "May I if you like.")))]]
-                        <[when can-may-i-pre-pause?
-                          <[div {:style {:margin "10px 0 5px 0"}
-                                 :class "field has-addons"} $=
-                            <[p {:class "control" :style {:flex "1"}} $=
-                              <[button {:class "button is-static"
-                                        :style {:visibility "hidden"}}]]
-                            <[when awaiting-you?
+                                :padding "10px 1.5em"
+                                :background "black"}} $=
+                <[div {:style {:max-width "960px" :margin "auto"}} $=
+                  <[when hand-winner
+                    <[p {:class "is-size-5"
+                         :style {:color "white"}} $=
+                      <[dom/text "Hand won by "]
+                      <[span {:class "has-text-weight-bold"} hand-winner]
+                      <[dom/text "!"]]
+                    <[when dealer?
+                      <[button {:class "button is-danger"} "Deal Next Hand"
+                        ] d-deal >
+                      (->> (dom/on-click d-deal)
+                           (e/map #(-> [l/->Deal]))
+                           emit-game-action)]]
+                  <[when intends?
+                    <[div {:class "t3"
+                           :style {:opacity (if paused? "0.5" "1")}} $=
+                      <[if turn?
+                        <[then
+                          <[div (str "You have indicated you would like to"
+                                     " draw from the deck...")]
+                          <[button {:disabled (boolean paused?)
+                                    :style {:margin "10px 0"}
+                                    :class "button is-small is-danger"} "Cancel"
+                            ] d-cancel >
+                          (->> (dom/on-click d-cancel)
+                               (e/map #(-> [l/->Cancel]))
+                               emit-game-action)]
+                        <[else
+                          <[div $=
+                            <[span {:class "has-text-weight-bold"} turn-name]
+                            <[dom/text (str " has indicated they would like to"
+                                            " draw from the deck. "
+                                            (cond
+                                              (not can-may-i-pre-pause?) ""
+                                              awaiting-you?
+                                              "What would you like to do?"
+                                              :else
+                                              (str "We assume you are passing so "
+                                                   "you don't need to input "
+                                                   "anything but you can still "
+                                                   "May I if you like.")))]]
+                          <[when can-may-i-pre-pause?
+                            <[div {:style {:margin "10px 0 5px 0"}
+                                   :class "field has-addons"} $=
+                              <[p {:class "control" :style {:flex "1"}} $=
+                                <[button {:class "button is-static"
+                                          :style {:visibility "hidden"}}]]
+                              <[when awaiting-you?
+                                <[p {:class "control"} $=
+                                  <[button {:disabled (boolean paused?)
+                                            :class {:button true
+                                                    :is-warning (not passing?)
+                                                    :is-info passing?
+                                                    :is-small true}}
+                                    (if passing? "Cancel" "Pass")
+                                    ] d-pass >
+                                  (->> (dom/on-click d-pass)
+                                       (e/map #(if passing?
+                                                 [l/->Cancel]
+                                                 [l/->PassDiscard]))
+                                       emit-game-action)]
+                                <[p {:class "control" :style {:flex "0.5"}} $=
+                                  <[button {:class "button is-static"
+                                            :style {:visibility "hidden"}}]]
+                                <[p {:class "control"
+                                     :style {:min-width "40px" :max-width "40px"}} $=
+                                  <[button {:class "button is-static"
+                                            :style {:visibility "hidden"}}]]
+                                <[p {:class "control" :style {:flex "0.5"}} $=
+                                  <[button {:class "button is-static"
+                                            :style {:visibility "hidden"}}]]]
                               <[p {:class "control"} $=
                                 <[button {:disabled (boolean paused?)
                                           :class {:button true
-                                                  :is-warning (not passing?)
-                                                  :is-info passing?
+                                                  :is-danger (not may-ing?)
+                                                  :is-info may-ing?
                                                   :is-small true}}
-                                  (if passing? "Cancel" "Pass")
-                                  ] d-pass >
-                                (->> (dom/on-click d-pass)
-                                     (e/map #(if passing?
+                                  (if may-ing? "Cancel" "May I")
+                                  ] d-may-i >
+                                (->> (dom/on-click d-may-i)
+                                     (e/map #(if may-ing?
                                                [l/->Cancel]
-                                               [l/->PassDiscard]))
+                                               [l/->RequestDiscard]))
                                      emit-game-action)]
-                              <[p {:class "control" :style {:flex "0.5"}} $=
+                              <[p {:class "control" :style {:flex "1"}} $=
                                 <[button {:class "button is-static"
-                                          :style {:visibility "hidden"}}]]
-                              <[p {:class "control"
-                                   :style {:min-width "40px" :max-width "40px"}} $=
-                                <[button {:class "button is-static"
-                                          :style {:visibility "hidden"}}]]
-                              <[p {:class "control" :style {:flex "0.5"}} $=
-                                <[button {:class "button is-static"
-                                          :style {:visibility "hidden"}}]]]
-                            <[p {:class "control"} $=
-                              <[button {:disabled (boolean paused?)
-                                        :class {:button true
-                                                :is-danger (not may-ing?)
-                                                :is-info may-ing?
-                                                :is-small true}}
-                                (if may-ing? "Cancel" "May I")
-                                ] d-may-i >
-                              (->> (dom/on-click d-may-i)
-                                   (e/map #(if may-ing?
-                                             [l/->Cancel]
-                                             [l/->RequestDiscard]))
-                                   emit-game-action)]
-                            <[p {:class "control" :style {:flex "1"}} $=
-                              <[button {:class "button is-static"
-                                        :style {:visibility "hidden"}}]]]]]]]
-                  let [awaiting
-                       (->> request-states
-                            (drop 1))]
-                  <[div {:style {:display "flex"
-                                 :flex-direction "column"
-                                 :align-items "stretch"}} $=
-                    <[div $=
-                      <[dom/text
-                        (cond
-                          (not paused?) ""
-                          (nil? may-ier) "No May Is. Giving top of deck to "
-                          :else "May I given to ")]
-                      <[span {:class "has-text-weight-bold"}
-                        (cond
-                          (not paused?) "Waiting On"
-                          (nil? may-ier) turn-name
-                          :else may-ier)]]
-                    <[for awaiting $[{:keys [name request-state]}]=
-                      <[keyed name
-                        <[div {:class {:request-state true
-                                       :rs-pass (= request-state :pass)
-                                       :rs-auto (not= (get discard-requests name)
-                                                      false)
-                                       :rs-may-i (and paused? (= name may-ier))
-                                       :rs-request (= request-state :request)}}
-                          name]]]
-                    <[div {:style {:align-self "flex-end"}
-                           :class "is-size-7"} $=
-                      <[span "( "]
-                      <[span {:class "request-state"} "Waiting"]
-                      <[span ", "]
-                      <[span {:class "request-state rs-pass rs-auto"}
-                        "Auto-pass"]
-                      <[span ", "]
-                      <[span {:class "request-state rs-pass"}
-                        "Pass"]
-                      <[span ", "]
-                      <[span {:class "request-state rs-request"}
-                        "May I"]
-                      <[span ", "]
-                      <[span {:class "request-state rs-request rs-may-i"}
-                        "May I Granted"]
-                      <[span " )"]]]]]]]
+                                          :style {:visibility "hidden"}}]]]]]]]
+                    let [awaiting
+                         (->> request-states
+                              (drop 1))]
+                    <[div {:style {:margin-top "1.5em"
+                                   :display "flex"
+                                   :flex-direction "column"
+                                   :align-items "stretch"}} $=
+                      <[div $=
+                        <[dom/text
+                          (cond
+                            (not paused?) ""
+                            (nil? may-ier) "No May Is. Giving top of deck to "
+                            :else "May I given to ")]
+                        <[span {:class "has-text-weight-bold"}
+                          (cond
+                            (not paused?) "Waiting On"
+                            (nil? may-ier) turn-name
+                            :else may-ier)]]
+                      <[for awaiting $[{:keys [name request-state]}]=
+                        <[keyed name
+                          <[div {:class {:request-state true
+                                         :rs-pass (= request-state :pass)
+                                         :rs-auto (not= (get discard-requests name)
+                                                        false)
+                                         :rs-may-i (and paused? (= name may-ier))
+                                         :rs-request (= request-state :request)}}
+                            name]]]
+                      <[div {:style {:align-self "flex-end"}
+                             :class "is-size-7"} $=
+                        <[span "( "]
+                        <[span {:class "request-state"} "Waiting"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-pass rs-auto"}
+                          "Auto-pass"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-pass"}
+                          "Pass"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-request"}
+                          "May I"]
+                        <[span ", "]
+                        <[span {:class "request-state rs-request rs-may-i"}
+                          "May I Granted"]
+                        <[span " )"]]]]]]]]
           <[for players $[name]=
             let [hand (get hands name)
                  {:keys [held may-is down]} hand
@@ -696,10 +694,8 @@
                                                "px, " %
                                                ")")]
                           <[keyed card
-                            <[div {:class "pcard"
-                                   :style {:transition
-                                           "transform 0.5s ease-in-out"
-                                           :transform
+                            <[div {:class "t2 pcard"
+                                   :style {:transform
                                            (transform "200%")
                                            :delayed
                                            {:transform (transform "0")}}} $=
@@ -868,9 +864,8 @@
                  :class "play-board"} $=
             <[div {:style {:visibility "hidden"}} $=
               <[render-top]]
-            <[div {:class "play-board-body-wrapper"
-                   :style {:transition "transform 0.5s ease-in-out"
-                           :transform (if view-table?
+            <[div {:class "t2 play-board-body-wrapper"
+                   :style {:transform (if view-table?
                                         "translateY(100%)"
                                         "translateY(0)")}} $=
               <[div {:style {:position "absolute"
@@ -895,12 +890,12 @@
                (e/map #(-> nil))
                (dom/emit ::selected))]]]
     <[when (= tab :table)
-      <[div_ {:style {:position "fixed"
+      <[div_ {:class "t2"
+              :style {:position "fixed"
                       :width "100%"
                       :z-index "4"
                       :left "0"
                       :bottom "0"
-                      :transition "transform 0.5s ease-in-out"
                       :transform "translateY(100%)"
                       :delayed {:transform (str "translateY("
                                                 (if view-table? "100%" "0")
@@ -1041,13 +1036,12 @@
     s-error-display <- (s/from nil e-error-display)
     <[dom/bind s-error-display $[error-display]=
       <[when error-display
-        <[div {:class "notification is-danger"
+        <[div {:class "t3 notification is-danger"
                :style {:position "fixed"
                        :top "1em"
                        :left "calc(50% - 10em)"
                        :width "20em"
                        :z-index "10"
-                       :transition "opacity 0.5s ease-in-out"
                        :opacity "0"
                        :delayed {:opacity "1"}
                        :remove {:opacity "0"}}} $=
@@ -1062,7 +1056,7 @@
                                  {:curr next :prev curr}))
                              {}
                              e-game-state)
-  s-defered <- (s/defer s-game-states 5000)
+  s-defered <- (s/defer s-game-states 2500)
   s-all <- (s/zip-with (fn [fast slow]
                          (let [{:keys [drawn?
                                        turn

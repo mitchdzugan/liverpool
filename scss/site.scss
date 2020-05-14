@@ -724,3 +724,37 @@ body {
 				}
 		}
 }
+
+.t1 {
+		transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+}
+
+.t2 {
+		transition: transform 0.5s ease-in-out;
+}
+
+.t3 {
+		transition: opacity 0.5s ease-in-out;
+}
+
+.t4 {
+		transition: opacity 0.5s ease-in-out 5s, transform 0.5s ease-in-out;
+}
+
+.tn {
+		.t1 {
+				transition: none;
+		}
+
+		.t2 {
+				transition: none;
+		}
+
+		.t3 {
+				transition: none;
+		}
+
+		.t4 {
+				transition: none;
+		}
+}
