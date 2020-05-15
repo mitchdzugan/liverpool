@@ -22,4 +22,4 @@ automatically works for heroku app with clojure -> node buildpack
  [x] disambiguate table body and scores body with keys (fixed in mayu)
  [x] fix click on self when selected
  [x] fix tab bar at full width
- [/] changed :delayed-class to delayed {:class ...} in mayu (fixed the bug but still only using :delayed-class)
+ [x] changed :delayed-class to delayed {:class ...} in mayu

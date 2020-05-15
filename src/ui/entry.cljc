@@ -337,7 +337,7 @@
          !ui render-hand
          (fn [parent-id]
            <[div {:class "tn my-hand"
-                  :delayed-class "my-hand"} $=
+                  :delayed {:class "my-hand"}} $=
              <[div {:id parent-id :class "card-parent"} $=
                <[for held $[card]=
                  <[keyed card
@@ -394,7 +394,7 @@
                          :remove {:position "absolute"
                                   :transform "translateY(-100%)"}}
                  :class "tn t2 main-controls"
-                 :delayed-class "t2 main-controls"} $=
+                 :delayed {:class "t2 main-controls"}} $=
             <[div {:class {:deck true :picking picking? :intended intends?}} $=
               <[when can-may-i?
                 <[button {:class {:may-i true :cancel may-ing?}} $=
@@ -494,7 +494,7 @@
                       <[td (str "$" p i "." d)]]]]]]]]]
       <[when (= tab :table)
         <[div {:class "tn players"
-               :delayed-class "players"} $=
+               :delayed {:class "players"}} $=
           <[when (or hand-winner (and intends? (not drawn?)))
             <[div {:class "t3"
                    :style {:position "fixed"
