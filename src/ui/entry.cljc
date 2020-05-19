@@ -5,7 +5,7 @@
             [mayu.frp.event :as e]
             [mayu.frp.signal :as s]
             [mayu.dom :as dom]
-            [wayra.core :refer [exec <#>]]
+            [wayra.core :as w :refer [exec <#>]]
             [router :as r]
             [liverpool :as l]
             [card :as c]))
@@ -140,6 +140,10 @@
                 (remove #(get m-held %) srvr))
         vec)))
 
+(defn dom-memo [_ m] m)
+(defn dom-stash [m] (w/pure {:m m}))
+(defn dom-unstash [{:keys [m]}] m)
+
 (defui play-state [inner]
   state <- (dom/envs :state)
   <[dom/memo (:room-id state) $=
@@ -184,18 +188,23 @@
                                    plays
                                    selected-card
                                    {:keys [curr prev]}]]=
+                let [t1 (.now js/Date)]
                 <[dom/assoc-env :prev prev $=
                   <[dom/assoc-env :state curr $=
                     let [{:keys [hands name]} curr
-                         {:keys [held]} (get hands name)
-                         now-held (ammend-client-held held client-held)]
+                         {:keys [held]} (get hands name)]
+                    <[dom-memo [held client-held] $=
+                      [(ammend-client-held held client-held)]
+                      ] now-held >
                     [(set-item storage-key now-held)]
                     <[inner
                       now-held
                       plays
                       picked-tab
                       selected-card
-                      view-table?]]]]]]]]]])
+                      view-table?]
+                    let [t2 (.now js/Date)]
+                    [(println (str "Render Time " (/ (- t2 t1) 1000) "s"))]]]]]]]]]])
 
 (defui unknown-cards [num-cards & args]
   let [opts (nth args 0 {})
@@ -208,42 +217,45 @@
        width (+ (* 2 spread-count) 25)
        downed-y #(str "translate(" (* %1 2) "px, " (+ %1 200)"%)")
        steady-y #(str "translate(" (* % 2) "px, 0)")]
-  <[div {:style {:width (str width "px")} :class "deck-top"} $=
-    <[for (range (inc (max min-cards num-cards))) $[i]=
-      <[keyed i
-        let [x (max 0 (- i (- num-cards spread-count)))
-             get-styles
-             #(merge {:transform (if delayed?
-                                   (downed-y %1)
-                                   (steady-y %1))}
-                     (if delayed?
-                       {:delayed {:transform (steady-y %1)}}
-                       {})
-                     (if removed?
-                       {:remove {:transform (downed-y %1)}}
-                       {}))]
-        <[cond
-          <[(< i num-cards)
-            <[div {:style (get-styles x)
-                   :class "t4 pcard deck-loop"} $=
-              <[img {:src "/cards/15.0.png"}]]]
-          <[(and last (= i num-cards))
-            <[div {:style (-> (get-styles (dec x))
-                              (assoc :opacity "1")
-                              (assoc-in [:delayed :opacity] "0"))
-                   :class "t4 pcard deck-loop"} $=
-              <[img {:src (-> last c/from-int c/to-src)}]]]
-          <[(< i min-cards)
-            <[div {:style (get-styles 0)
-                   :class "t4 pcard deck-loop"} $=
-              <[img {:src (-> nil c/from-int c/to-src)}]]]
-          <[:else []]]]]
-    ] d-stack >
-  <[div {:class "full-count"} num-cards]
-  [d-stack])
+  <[dom-memo [num-cards opts] $=
+    <[div {:style {:width (str width "px")} :class "deck-top"} $=
+      <[for (range (inc (max min-cards num-cards))) $[i]=
+        <[keyed i
+          let [x (max 0 (- i (- num-cards spread-count)))
+               get-styles
+               #(merge {:transform (if delayed?
+                                     (downed-y %1)
+                                     (steady-y %1))}
+                       (if delayed?
+                         {:delayed {:transform (steady-y %1)}}
+                         {})
+                       (if removed?
+                         {:remove {:transform (downed-y %1)}}
+                         {}))]
+          <[cond
+            <[(< i num-cards)
+              <[div {:style (get-styles x)
+                     :class "t4 pcard deck-loop"} $=
+                <[img {:src "/cards/15.0.png"}]]]
+            <[(and last (= i num-cards))
+              <[div {:style (-> (get-styles (dec x))
+                                (assoc :opacity "1")
+                                (assoc-in [:delayed :opacity] "0"))
+                     :class "t4 pcard deck-loop"} $=
+                <[img {:src (-> last c/from-int c/to-src)}]]]
+            <[(< i min-cards)
+              <[div {:style (get-styles 0)
+                     :class "t4 pcard deck-loop"} $=
+                <[img {:src (-> nil c/from-int c/to-src)}]]]
+            <[:else []]]]]
+      ] d-stack >
+    <[div {:class "full-count"} num-cards]
+    [d-stack]])
 
 (defui play-screen []
   <[play-state $[held plays picked-tab selected-card view-table?]=
+    s-plays <- (dom/envs ::plays)
+    s-selected <- (dom/envs ::selected)
     prev <- (dom/envs :prev)
     state <- (dom/envs :state)
     hand-winner <- (run-m l/get-hand-winner)
@@ -336,25 +348,29 @@
     let [tab (if game-over? :scores picked-tab)
          !ui render-hand
          (fn [parent-id]
-           <[div {:class "tn my-hand"
-                  :delayed {:class "my-hand"}} $=
-             <[div {:id parent-id :class "card-parent"} $=
-               <[for held $[card]=
-                 <[keyed card
-                   <[div {:style {:opacity "0"
-                                  :transform "translateX(200%)"
-                                  :delayed {:opacity "1"
-                                            :transform "translateX(0)"}}
-                          :class "t1 pcard" :data-card-val card} $=
-                     <[img {:class {:clickable (nil? selected-card)
-                                    :selected (= card selected-card)
-                                    :in-play (get in-play card)}
-                            :src (-> card c/from-int c/to-src)}]
-                     ] d-hand >
-                   (->> (dom/on-click d-hand)
-                        (e/filter #(nil? selected-card))
-                        (e/map #(-> card))
-                        (dom/emit ::selected))]]]])]
+           <[dom-memo (if (nil? parent-id)
+                        (count held)
+                        [held selected-card plays]) $=
+             <[div {:class "tn my-hand"
+                    :delayed {:class "my-hand"}} $=
+               <[div {:id (or parent-id "hidden-parent")
+                      :class "card-parent"} $=
+                 <[for held $[card]=
+                   <[keyed card
+                     <[div {:style {:opacity "0"
+                                    :transform "translateX(200%)"
+                                    :delayed {:opacity "1"
+                                              :transform "translateX(0)"}}
+                            :class "t1 pcard" :data-card-val card} $=
+                       <[img {:class {:clickable (nil? selected-card)
+                                      :selected (= card selected-card)
+                                      :in-play (get in-play card)}
+                              :src (-> card c/from-int c/to-src)}]
+                       ] d-hand >
+                     (->> (dom/on-click d-hand)
+                          (e/filter #(nil? selected-card))
+                          (e/map #(-> card))
+                          (dom/emit ::selected))]]]]])]
     <[div {:style {:position "relative"}
            :class "in-game"} $=
       <[div {:style {:position "fixed"
@@ -425,24 +441,25 @@
                          (e/map #(-> [l/->PassDiscard]))
                          emit-game-action)]
                   <[else <[div]]]]
-              <[div {:style {:position "relative"}
-                     :class "pcard discarded" :data-card-val discard} $=
-                <[img {:src (-> nil c/from-int c/to-src)}]
-                <[for (reverse discard) $[card]=
-                  <[keyed card
-                    <[div {:style {:position "absolute"
-                                   :left "0"
-                                   :top "0"
-                                   :margin "0"
-                                   :transform "translateY(200%)"
-                                   :opacity "0"
-                                   :delayed {:transform "translateY(0)"
-                                             :opacity "1"}
-                                   :remove {:transform "translateY(200%)"
-                                            :opacity "0"}}
-                           :class "t1 pcard"} $=
-                      <[img {:src (-> card c/from-int c/to-src)}]]]]
-                ] d-discard >
+              <[dom-memo discard $=
+                <[div {:style {:position "relative"}
+                       :class "pcard discarded"} $=
+                  <[img {:src (-> nil c/from-int c/to-src)}]
+                  <[for (reverse discard) $[card]=
+                    <[keyed card
+                      <[div {:style {:position "absolute"
+                                     :left "0"
+                                     :top "0"
+                                     :margin "0"
+                                     :transform "translateY(200%)"
+                                     :opacity "0"
+                                     :delayed {:transform "translateY(0)"
+                                               :opacity "1"}
+                                     :remove {:transform "translateY(200%)"
+                                              :opacity "0"}}
+                             :class "t1 pcard"} $=
+                        <[img {:src (-> card c/from-int c/to-src)}]]]]
+                  ]] d-discard >
               <[unknown-cards deck-count {:removed? true}] d-deck >
               (->> (dom/on-click d-discard)
                    (e/filter #(and (not drawn?) turn?))
@@ -649,96 +666,98 @@
                         <[span {:class "request-state rs-request rs-may-i"}
                           "May I Granted"]
                         <[span " )"]]]]]]]]
-          <[for players $[name]=
-            let [hand (get hands name)
-                 {:keys [held may-is down]} hand
-                 held-count (get hand :held-count (count held))
-                 may-ier? (= name may-ier)
-                 turn? (= name turn-name)
-                 dealer? (= name dealer-name)
-                 dealer-class "dealer-chip fas fa-chevron-circle-right"
-                 !ui chip
-                 (fn [i]
-                   <[div {:class {:used (> i may-is)
-                                  :active (and may-ier? (= i may-is))
-                                  :may-i-chip true}}])]
-            <[keyed name
-              <[div {:class {:turn turn? :player true}} $=
-                <[div {:class "text"} $=
-                  <[when dealer?
-                    <[i {:class dealer-class}]]
-                  <[dom/text name]
-                  <[when dealer?
-                    <[i {:class [dealer-class "hidden"]}]]]
-                <[div {:class "player-contents"} $=
-                  <[div {:class "board-hand"} $=
-                    <[unknown-cards held-count {:max held-count
-                                                :min 1
-                                                :last (and (= name taker) taken)
-                                                :delayed? true}]
-                    <[div {:class "may-i-chips"} $=
-                      <[chip 1]
-                      <[chip 2]
-                      <[chip 3]]]]
-                <[for (keys down) $[type]=
-                  let [req (type goals)
-                       piles (get-in plays [:table name type] {})]
-                  <[for (map vector (range) (type down)) $[[id pile]]=
-                    let [[pre post] (get piles id)
-                         guid (hash [type id name])
-                         all (vec (concat pre pile post))
-                         all-count (count all)]
-                    <[keyed guid
-                      let [spread-width (+ 35 (* 15 all-count))]
-                      <[div {:id guid
-                             :class "extra-cards"
-                             :style {:width (str spread-width "px")}} $=
-                        <[for (map vector (range) all) $[[i card]]=
-                          let [transform #(str "translate("
-                                               (* i 15)
-                                               "px, " %
-                                               ")")]
-                          <[keyed card
-                            <[div {:class "t2 pcard"
-                                   :style {:transform
-                                           (transform "200%")
-                                           :delayed
-                                           {:transform (transform "0")}}} $=
-                              <[img {:class {:selected (get in-play card)}
-                                     :src (-> card c/from-int c/to-src)}]]]]
-                        ] d-pile >
-                      (->> (dom/on-click {:capture true} d-pile)
-                           (e/filter #(and selected-card my-turn? drawn?))
-                           (e/map #(let [client-x (.-clientX %)
-                                         el (js/document.getElementById guid)
-                                         rect (.getBoundingClientRect el)
-                                         x (.-x rect)
-                                         width (.-width rect)
-                                         orientation (if (> (* 2
-                                                               (- client-x
-                                                                  x))
-                                                            width)
-                                                       :right
-                                                       :left)
-                                         left? (= orientation :left)
-                                         [new-pre new-post]
-                                         [(if left?
-                                            (vec (concat [selected-card] pre))
-                                            pre)
-                                          (if left?
-                                            post
-                                            (vec (concat post [selected-card])))]]
-                                     {:pre new-pre :post new-post :pile pile}))
-                           (e/filter (fn [{:keys [pre pile post]}]
-                                       (->> (concat pre pile post)
-                                            vec
-                                            (l/validate-play type)
-                                            (passes?-m-f state))))
-                           (e/map #(-> [(:pre %1) (:post %1)]))
-                           (e/map #(->> %
-                                        (assoc piles id)
-                                        (assoc-in plays [:table name type])))
-                           (dom/emit ::plays))]]]]]]
+          <[dom-memo [hands (:table plays) turn-name dealer-name drawn?] $=
+            <[for players $[name]=
+              let [hand (get hands name)
+                   {:keys [held may-is down]} hand
+                   held-count (get hand :held-count (count held))
+                   may-ier? (= name may-ier)
+                   turn? (= name turn-name)
+                   dealer? (= name dealer-name)
+                   dealer-class "dealer-chip fas fa-chevron-circle-right"
+                   !ui chip
+                   (fn [i]
+                     <[div {:class {:used (> i may-is)
+                                    :active (and may-ier? (= i may-is))
+                                    :may-i-chip true}}])]
+              <[keyed name
+                <[div {:class {:turn turn? :player true}} $=
+                  <[div {:class "text"} $=
+                    <[when dealer?
+                      <[i {:class dealer-class}]]
+                    <[dom/text name]
+                    <[when dealer?
+                      <[i {:class [dealer-class "hidden"]}]]]
+                  <[div {:class "player-contents"} $=
+                    <[div {:class "board-hand"} $=
+                      <[unknown-cards held-count {:max held-count
+                                                  :min 1
+                                                  :last (and (= name taker) taken)
+                                                  :delayed? true}]
+                      <[div {:class "may-i-chips"} $=
+                        <[chip 1]
+                        <[chip 2]
+                        <[chip 3]]]]
+                  <[for (keys down) $[type]=
+                    let [req (type goals)
+                         piles (get-in plays [:table name type] {})]
+                    <[for (map vector (range) (type down)) $[[id pile]]=
+                      let [[pre post] (get piles id)
+                           guid (hash [type id name])
+                           all (vec (concat pre pile post))
+                           all-count (count all)]
+                      <[keyed guid
+                        let [spread-width (+ 35 (* 15 all-count))]
+                        <[div {:id guid
+                               :class "extra-cards"
+                               :style {:width (str spread-width "px")}} $=
+                          <[for (map vector (range) all) $[[i card]]=
+                            let [transform #(str "translate("
+                                                 (* i 15)
+                                                 "px, " %
+                                                 ")")]
+                            <[keyed card
+                              <[div {:class "t2 pcard"
+                                     :style {:transform
+                                             (transform "200%")
+                                             :delayed
+                                             {:transform (transform "0")}}} $=
+                                <[img {:class {:selected (get in-play card)}
+                                       :src (-> card c/from-int c/to-src)}]]]]
+                          ] d-pile >
+                        (->> (dom/on-click {:capture true} d-pile)
+                             (e/filter #(and (s/inst! s-selected) my-turn? drawn?))
+                             (e/map #(let [selected-card (s/inst! s-selected)
+                                           client-x (.-clientX %)
+                                           el (js/document.getElementById guid)
+                                           rect (.getBoundingClientRect el)
+                                           x (.-x rect)
+                                           width (.-width rect)
+                                           orientation (if (> (* 2
+                                                                 (- client-x
+                                                                    x))
+                                                              width)
+                                                         :right
+                                                         :left)
+                                           left? (= orientation :left)
+                                           [new-pre new-post]
+                                           [(if left?
+                                              (vec (concat [selected-card] pre))
+                                              pre)
+                                            (if left?
+                                              post
+                                              (vec (concat post [selected-card])))]]
+                                       {:pre new-pre :post new-post :pile pile}))
+                             (e/filter (fn [{:keys [pre pile post]}]
+                                         (->> (concat pre pile post)
+                                              vec
+                                              (l/validate-play type)
+                                              (passes?-m-f state))))
+                             (e/map #(-> [(:pre %1) (:post %1)]))
+                             (e/map #(->> %
+                                          (assoc piles id)
+                                          (assoc-in plays [:table name type])))
+                             (dom/emit ::plays))]]]]]]]
           <[div {:class "reserved-space"}]]]]
     d-in-game >
     (->> (dom/on-click {:capture false} d-in-game)
@@ -757,109 +776,112 @@
                 spread (drop (dec req) curr)
                 spread-width (+ 15 (* 15 (count spread)))
                 label (type {:set "Set" :run "Run"})]
-           <[div {:class "target"} $=
-             <[div {:class "target-plays"} $=
-               <[for (range req) $[n]=
-                 <[keyed n
-                   let [last? (= n (dec req))
-                        full? (every? (comp not nil?) curr)
-                        [pre post] (if (and last? full?)
-                                     [curr []]
-                                     (split-at n curr))
-                        back? (every? (comp not nil?) post)
-                        [non-nil nil-then] (split-with (comp not nil?)
-                                                       (if back? pre post))
-                        dropped (concat non-nil (drop 1 nil-then))
-                        [pre post] (if back? [dropped post] [pre dropped])]
-                   <[if last?
-                     <[then
-                       <[div {:style {:width (str spread-width "px")
-                                      :position "relative"
-                                      :display "inline-block"
-                                      :margin "0 5px"
-                                      :height "45px"}} $=
-                         <[for (map vector (range) spread) $[[i card]]=
-                           <[div {:class "pcard"
-                                  :style {:position "absolute"
-                                          :margin "0"
-                                          :top "0"
-                                          :left "0"
-                                          :transform (str "translateX("
-                                                          (* i 15)
-                                                          "px)")}} $=
-                             <[img {:src (-> card c/from-int c/to-src)}]]]]]
-                     <[else
-                       <[div {:class "pcard"} $=
-                         <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
-                         ]]] d-target >
-                   (->> (dom/on-click d-target)
-                        (e/map #(let [added (if back?
-                                              (concat pre post [selected-card])
-                                              (concat pre [selected-card] post))
-                                      [reqd extra] (split-at req added)
-                                      extra-used (->> extra
-                                                      reverse
-                                                      (remove nil?)
-                                                      reverse)
-                                      updated (vec (concat reqd extra-used))]
-                                  (->> updated
-                                       (assoc curr-type id)
-                                       (assoc-in plays [:down type]))))
-                        (dom/emit ::plays))]]]
-             let [any? (->> curr (remove nil?) empty? not)]
-             invalid? <- <[when any?
-                           (<#> (passes?-m (l/validate-play type curr))
-                                not)]
-             <[span {:class {:invalid invalid?}} label]
-             <[when any?
-               <[span {:class "cancel"} "✗"] d-cancel >
-               (->> (dom/on-click d-cancel)
-                    (e/map #(-> plays
-                                (assoc-in [:down type id] (->> (range req)
-                                                               (map (fn [] nil))
-                                                               vec))
-                                (update :down (fn [downs]
-                                                (if (every? nil? (leafs downs))
-                                                  nil
-                                                  downs)))))
-                    (dom/emit ::plays))]])]
+           <[dom-memo [type id curr] $=
+             <[div {:class "target"} $=
+               <[div {:class "target-plays"} $=
+                 <[for (range req) $[n]=
+                   <[keyed n
+                     let [last? (= n (dec req))
+                          full? (every? (comp not nil?) curr)
+                          [pre post] (if (and last? full?)
+                                       [curr []]
+                                       (split-at n curr))
+                          back? (every? (comp not nil?) post)
+                          [non-nil nil-then] (split-with (comp not nil?)
+                                                         (if back? pre post))
+                          dropped (concat non-nil (drop 1 nil-then))
+                          [pre post] (if back? [dropped post] [pre dropped])]
+                     <[if last?
+                       <[then
+                         <[div {:style {:width (str spread-width "px")
+                                        :position "relative"
+                                        :display "inline-block"
+                                        :margin "0 5px"
+                                        :height "45px"}} $=
+                           <[for (map vector (range) spread) $[[i card]]=
+                             <[div {:class "pcard"
+                                    :style {:position "absolute"
+                                            :margin "0"
+                                            :top "0"
+                                            :left "0"
+                                            :transform (str "translateX("
+                                                            (* i 15)
+                                                            "px)")}} $=
+                               <[img {:src (-> card c/from-int c/to-src)}]]]]]
+                       <[else
+                         <[div {:class "pcard"} $=
+                           <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
+                           ]]] d-target >
+                     (->> (dom/on-click d-target)
+                          (e/map #(let [selected-card (s/inst! s-selected)
+                                        added (if back?
+                                                (concat pre post [selected-card])
+                                                (concat pre [selected-card] post))
+                                        [reqd extra] (split-at req added)
+                                        extra-used (->> extra
+                                                        reverse
+                                                        (remove nil?)
+                                                        reverse)
+                                        updated (vec (concat reqd extra-used))]
+                                    (->> updated
+                                         (assoc curr-type id)
+                                         (assoc-in plays [:down type]))))
+                          (dom/emit ::plays))]]]
+               let [any? (->> curr (remove nil?) empty? not)]
+               invalid? <- <[when any?
+                             (<#> (passes?-m (l/validate-play type curr))
+                                  not)]
+               <[span {:class {:invalid invalid?}} label]
+               <[when any?
+                 <[span {:class "cancel"} "✗"] d-cancel >
+                 (->> (dom/on-click d-cancel)
+                      (e/map #(-> (s/inst! s-plays)
+                                  (assoc-in [:down type id] (->> (range req)
+                                                                 (map (fn [] nil))
+                                                                 vec))
+                                  (update :down (fn [downs]
+                                                  (if (every? nil? (leafs downs))
+                                                    nil
+                                                    downs)))))
+                      (dom/emit ::plays))]]])]
     let [play-board-open? (or (and (not drawn?) first-turn?)
-                              (and drawn? turn?))
-         !ui render-top
-         (fn []
-           <[div {:class "play-board-top"} $=
-             <[when (not drawn?)
-               <[div {:class "round-header"} round-title]]
-             <[div {:class {:play-controls true :hidden (not drawn?)}} $=
-               <[button {:disabled (empty? in-play)
-                         :class "button is-danger is-small"}
-                 "Cancel"] d-cancel >
-               (->> (dom/on-click d-cancel)
-                    (e/map #(-> {}))
-                    (dom/emit ::plays))
-               <[div {:class "discard-space"} $=
-                 <[div {:class "pcard"} $=
-                   <[img {:src (-> plays :discard c/from-int c/to-src)}]
-                   ] d-discard >
-                 (->> (dom/on-click d-discard)
-                      (e/map #(merge plays {:discard selected-card}))
-                      (dom/emit ::plays))
-                 <[span "Discard"]]
-               <[button {:disabled (not passes?)
-                         :class "button is-danger is-small"}
-                 "End Turn"] d-end-turn >
-               (->> (dom/on-click d-end-turn)
-                    (e/map #(-> [l/->Play plays]))
-                    emit-game-action)]
-             <[when (not down?)
-               <[div {:class "play-closer is-size-7"} $=
-                 <[div]
-                 <[div (str "View " (if view-table? "Plays" "Table"))
-                   ] d-change-view >
-                 (->> (dom/on-click d-change-view)
-                      (e/map #(not view-table?))
-                      (dom/emit ::view-table?))
-                 <[div]]]])]
+                              (and drawn? turn?))]
+    <[dom-stash $=
+      <[div {:class "play-board-top"} $=
+        <[when (not drawn?)
+          <[div {:class "round-header"} round-title]]
+        <[div {:class {:play-controls true :hidden (not drawn?)}} $=
+          <[button {:disabled (empty? in-play)
+                    :class "button is-danger is-small"}
+            "Cancel"] d-cancel >
+          (->> (dom/on-click d-cancel)
+               (e/map #(-> {}))
+               (dom/emit ::plays))
+          <[div {:class "discard-space"} $=
+            <[div {:class "pcard"} $=
+              <[img {:src (-> plays :discard c/from-int c/to-src)}]
+              ] d-discard >
+            (->> (dom/on-click d-discard)
+                 (e/map #(merge plays {:discard selected-card}))
+                 (dom/emit ::plays))
+            <[span "Discard"]]
+          <[button {:disabled (not passes?)
+                    :class "button is-danger is-small"}
+            "End Turn"] d-end-turn >
+          (->> (dom/on-click d-end-turn)
+               (e/map #(-> [l/->Play plays]))
+               emit-game-action)]
+        <[when (not down?)
+          <[div {:class "play-closer is-size-7"} $=
+            <[div]
+            <[div (str "View " (if view-table? "Plays" "Table"))
+              ] d-change-view >
+            (->> (dom/on-click d-change-view)
+                 (e/map #(not view-table?))
+                 (dom/emit ::view-table?))
+            <[div]]]]
+      ] top-stash >
+    let [!ui render-top (fn [] <[dom-unstash top-stash])]
     <[when (= tab :table)
       <[when play-board-open?
         <[keyed [tab "play-board"]
@@ -889,7 +911,7 @@
                     <[keyed [:run id]
                       <[render-goal :run id]]]]]
               <[div {:class "play-board-footer"} $=
-                <[render-hand "hidden-parent"]]]
+                <[render-hand nil]]]
             ] d-play-board >
           (->> (dom/on-click {:capture false} d-play-board)
                (e/map #(-> nil))
