@@ -140,10 +140,6 @@
                 (remove #(get m-held %) srvr))
         vec)))
 
-(defn dom-memo [_ m] m)
-(defn dom-stash [m] (w/pure {:m m}))
-(defn dom-unstash [{:keys [m]}] m)
-
 (defui play-state [inner]
   state <- (dom/envs :state)
   <[dom/memo (:room-id state) $=
@@ -193,7 +189,7 @@
                   <[dom/assoc-env :state curr $=
                     let [{:keys [hands name]} curr
                          {:keys [held]} (get hands name)]
-                    <[dom-memo [held client-held] $=
+                    <[dom/memo [held client-held] $=
                       [(ammend-client-held held client-held)]
                       ] now-held >
                     [(set-item storage-key now-held)]
@@ -217,7 +213,7 @@
        width (+ (* 2 spread-count) 25)
        downed-y #(str "translate(" (* %1 2) "px, " (+ %1 200)"%)")
        steady-y #(str "translate(" (* % 2) "px, 0)")]
-  <[dom-memo [num-cards opts] $=
+  <[dom/memo [num-cards opts] $=
     <[div {:style {:width (str width "px")} :class "deck-top"} $=
       <[for (range (inc (max min-cards num-cards))) $[i]=
         <[keyed i
@@ -348,7 +344,7 @@
     let [tab (if game-over? :scores picked-tab)
          !ui render-hand
          (fn [parent-id]
-           <[dom-memo (if (nil? parent-id)
+           <[dom/memo (if (nil? parent-id)
                         (count held)
                         [held selected-card plays]) $=
              <[div {:class "tn my-hand"
@@ -441,7 +437,7 @@
                          (e/map #(-> [l/->PassDiscard]))
                          emit-game-action)]
                   <[else <[div]]]]
-              <[dom-memo discard $=
+              <[dom/memo discard $=
                 <[div {:style {:position "relative"}
                        :class "pcard discarded"} $=
                   <[img {:src (-> nil c/from-int c/to-src)}]
@@ -666,7 +662,7 @@
                         <[span {:class "request-state rs-request rs-may-i"}
                           "May I Granted"]
                         <[span " )"]]]]]]]]
-          <[dom-memo [hands (:table plays) turn-name dealer-name drawn?] $=
+          <[dom/memo [hands (:table plays) turn-name dealer-name drawn?] $=
             <[for players $[name]=
               let [hand (get hands name)
                    {:keys [held may-is down]} hand
@@ -776,7 +772,7 @@
                 spread (drop (dec req) curr)
                 spread-width (+ 15 (* 15 (count spread)))
                 label (type {:set "Set" :run "Run"})]
-           <[dom-memo [type id curr] $=
+           <[dom/memo [type id curr] $=
              <[div {:class "target"} $=
                <[div {:class "target-plays"} $=
                  <[for (range req) $[n]=
@@ -846,7 +842,7 @@
                       (dom/emit ::plays))]]])]
     let [play-board-open? (or (and (not drawn?) first-turn?)
                               (and drawn? turn?))]
-    <[dom-stash $=
+    <[dom/stash $=
       <[div {:class "play-board-top"} $=
         <[when (not drawn?)
           <[div {:class "round-header"} round-title]]
@@ -881,7 +877,7 @@
                  (dom/emit ::view-table?))
             <[div]]]]
       ] top-stash >
-    let [!ui render-top (fn [] <[dom-unstash top-stash])]
+    let [!ui render-top (fn [] <[dom/unstash top-stash])]
     <[when (= tab :table)
       <[when play-board-open?
         <[keyed [tab "play-board"]
