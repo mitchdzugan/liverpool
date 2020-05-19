@@ -685,7 +685,7 @@
                        piles (get-in plays [:table name type] {})]
                   <[for (map vector (range) (type down)) $[[id pile]]=
                     let [[pre post] (get piles id)
-                         guid (hash [type id])
+                         guid (hash [type id name])
                          all (vec (concat pre pile post))
                          all-count (count all)]
                     <[keyed guid
@@ -1092,7 +1092,6 @@
   <[dom/assoc-env :s-game-state s-game-state $=
     <[dom/assoc-env :s-game-states s-all $=
       <[dom/bind s-all $[{:keys [curr prev]}]=
-        [(js/console.log curr)]
         <[dom/assoc-env :prev prev $=
           <[dom/assoc-env :state curr $=
             <[when (:room-id curr)
