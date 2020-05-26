@@ -752,7 +752,8 @@
                              (e/map #(-> [(:pre %1) (:post %1)]))
                              (e/map #(->> %
                                           (assoc piles id)
-                                          (assoc-in plays [:table name type])))
+                                          (assoc-in (s/inst! s-plays)
+                                                    [:table name type])))
                              (dom/emit ::plays))]]]]]]]
           <[div {:class "reserved-space"}]]]]
     d-in-game >
@@ -809,7 +810,15 @@
                            <[img {:src (-> curr (nth n) c/from-int c/to-src)}]
                            ]]] d-target >
                      (->> (dom/on-click d-target)
-                          (e/map #(let [selected-card (s/inst! s-selected)
+                          (e/map #(let [curr-type (get-in (s/inst! s-plays)
+                                                          [:down type]
+                                                          (->> (range (type goals))
+                                                               (map (fn []
+                                                                      (->> (range req)
+                                                                           (map (fn [] nil))
+                                                                           vec)))
+                                                               vec))
+                                        selected-card (s/inst! s-selected)
                                         added (if back?
                                                 (concat pre post [selected-card])
                                                 (concat pre [selected-card] post))
@@ -821,7 +830,8 @@
                                         updated (vec (concat reqd extra-used))]
                                     (->> updated
                                          (assoc curr-type id)
-                                         (assoc-in plays [:down type]))))
+                                         (assoc-in (s/inst! s-plays)
+                                                   [:down type]))))
                           (dom/emit ::plays))]]]
                let [any? (->> curr (remove nil?) empty? not)]
                invalid? <- <[when any?
@@ -858,7 +868,7 @@
               <[img {:src (-> plays :discard c/from-int c/to-src)}]
               ] d-discard >
             (->> (dom/on-click d-discard)
-                 (e/map #(merge plays {:discard selected-card}))
+                 (e/map #(merge (s/inst! s-plays) {:discard selected-card}))
                  (dom/emit ::plays))
             <[span "Discard"]]
           <[button {:disabled (not passes?)
