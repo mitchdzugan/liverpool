@@ -20,7 +20,7 @@
   "dependencies": {
     "bulma": "^0.8.2",
     "clipboard-copy": "^3.1.0",
-    "express": "^4.17.1",
+    "express": "^4.17.3",
     "snabbdom": "0.7.4",
     "socket.io": "^2.3.0"
   },
